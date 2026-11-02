@@ -1,0 +1,2 @@
+# Wordpress Decision Tree Plugin
+A plugin for admins to build decision trees/directed acyclic graphs (DAGs) to guide users towards defined products/tools/outcomes in accordance with their specified preferences.
