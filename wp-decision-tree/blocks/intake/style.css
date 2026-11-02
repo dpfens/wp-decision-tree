@@ -1,0 +1,16 @@
+.bdt-intake .bdt-options { list-style: none; margin: 1em 0; padding: 0; display: grid; gap: .5em; }
+.bdt-intake .bdt-option { width: 100%; text-align: left; cursor: pointer; }
+.bdt-intake .bdt-prompt:focus { outline: none; }
+.bdt-intake .bdt-error { color: #b32d2e; }
+.bdt-intake .bdt-beer { margin: 1.5em 0; padding-bottom: 1.5em; border-bottom: 1px solid rgba(0, 0, 0, .15); }
+.bdt-intake .bdt-beer img { max-width: 100%; height: auto; }
+.bdt-intake .bdt-beer-attributes { display: grid; grid-template-columns: max-content 1fr; gap: .25em 1em; margin: 1em 0 0; }
+.bdt-intake .bdt-beer-attributes dt { font-weight: 600; }
+.bdt-intake .bdt-beer-attributes dd { margin: 0; }
+.bdt-intake .bdt-restart { margin-top: 1em; }
+.bdt-intake[aria-busy="true"] { opacity: .6; pointer-events: none; }
+
+.bdt-intake .bdt-trail { margin: 0 0 1em; padding-left: 1.5em; opacity: .75; font-size: .9em; }
+.bdt-intake .bdt-progress { margin: 0; font-size: .85em; text-transform: uppercase; letter-spacing: .05em; opacity: .7; }
+.bdt-intake .bdt-back { margin-top: 1em; margin-right: .5em; background: transparent; color: inherit; border: 1px solid currentColor; }
+.bdt-intake .bdt-option.is-selected { outline: 2px solid currentColor; outline-offset: 2px; }

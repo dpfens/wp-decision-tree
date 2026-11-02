@@ -1,0 +1,87 @@
+name: decision-tree-test
+
+services:
+  db:
+    image: mariadb:10.11
+    environment:
+      MARIADB_DATABASE: wordpress
+      MARIADB_USER: wordpress
+      MARIADB_PASSWORD: wordpress
+      MARIADB_ROOT_PASSWORD: root
+    volumes:
+      - db_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  wordpress:
+    image: wordpress:php8.2-apache
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "8080:80"
+    environment:
+      WORDPRESS_DB_HOST: db
+      WORDPRESS_DB_NAME: wordpress
+      WORDPRESS_DB_USER: wordpress
+      WORDPRESS_DB_PASSWORD: wordpress
+      WORDPRESS_DEBUG: 1
+      WORDPRESS_CONFIG_EXTRA: |
+        define('WP_DEBUG_LOG', true);
+        define('WP_DEBUG_DISPLAY', true);
+        define('DISALLOW_FILE_EDIT', true);
+    volumes:
+      - wp_data:/var/www/html
+      # The plugin lives on the host and is mounted into the plugins directory.
+      - ./wp-decision-tree:/var/www/html/wp-content/plugins/wp-decision-tree
+
+  # One-shot setup: installs WordPress and activates the plugin, which runs
+  # Schema::install() through the activation hook.
+  wpcli:
+    image: wordpress:cli
+    depends_on:
+      db:
+        condition: service_healthy
+      wordpress:
+        condition: service_started
+    user: "33:33"
+    volumes:
+      - wp_data:/var/www/html
+      - ./wp-decision-tree:/var/www/html/wp-content/plugins/wp-decision-tree
+    environment:
+      WORDPRESS_DB_HOST: db
+      WORDPRESS_DB_NAME: wordpress
+      WORDPRESS_DB_USER: wordpress
+      WORDPRESS_DB_PASSWORD: wordpress
+    entrypoint: ["sh", "-c"]
+    command:
+      - |
+        until [ -f /var/www/html/wp-config.php ]; do sleep 2; done
+        wp core install \
+          --url=http://localhost:8080 \
+          --title="Decision Tree Test" \
+          --admin_user=admin \
+          --admin_password=admin \
+          --admin_email=admin@example.test \
+          --skip-email \
+          --path=/var/www/html || true
+        wp plugin activate wp-decision-tree --path=/var/www/html
+        wp plugin list --path=/var/www/html
+    restart: "no"
+
+  # Optional: run the PHPUnit suite with `docker compose --profile test run --rm phpunit`.
+  # The graph tests don't need WordPress, so this container only needs Composer and PHP.
+  phpunit:
+    image: composer:2
+    profiles: ["test"]
+    working_dir: /app
+    volumes:
+      - ./wp-decision-tree:/app
+    command: sh -c "composer install --no-interaction --prefer-dist && vendor/bin/phpunit tests/"
+
+volumes:
+  db_data:
+  wp_data:
