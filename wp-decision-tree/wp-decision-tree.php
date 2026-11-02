@@ -46,7 +46,7 @@ require_once BDT_DIR . 'includes/intake/intake-block.php';
 
     if (is_admin()) {
         (new BeerTree\Admin\TreeEditor($repo, $menu, $store))->register();
-        (new BeerTree\Admin\ResultsExporter($repo, $store))->register();
+        (new BeerTree\Admin\ResultsExporter($repo, $store, $menu))->register();
         (new BeerTree\Beer\AttributesPage($repo))->register();
         (new BeerTree\Beer\BeerAttributesMetabox($repo))->register();
 

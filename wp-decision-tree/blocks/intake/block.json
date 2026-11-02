@@ -2,13 +2,14 @@
     "$schema": "https://schemas.wp.org/trunk/block.json",
     "apiVersion": 3,
     "name": "bdt/intake",
-    "title": "Beer Decision Tree",
+    "title": "Decision Tree",
     "category": "widgets",
     "icon": "randomize",
     "description": "A guided questionnaire that walks visitors through a decision tree to beer recommendations.",
     "keywords": ["beer", "quiz", "questionnaire", "decision tree"],
     "attributes": {
-        "treeId": { "type": "integer", "default": 0 }
+        "treeId": { "type": "integer", "default": 0 },
+        "showMatches": { "type": "boolean", "default": false }
     },
     "supports": { "html": false },
     "editorScript": "file:./index.js",

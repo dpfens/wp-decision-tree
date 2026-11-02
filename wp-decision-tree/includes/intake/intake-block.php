@@ -21,7 +21,7 @@ final class IntakeBlock
         ]);
     }
 
-    /** @param array{treeId?:int} $attributes */
+    /** @param array{treeId?:int, showMatches?:bool} $attributes */
     public function render(array $attributes): string
     {
         $treeId = absint($attributes['treeId'] ?? 0);
@@ -34,10 +34,11 @@ final class IntakeBlock
         }
 
         return sprintf(
-            '<div %s data-tree-id="%d" data-endpoint="%s"><noscript>This questionnaire needs JavaScript.</noscript></div>',
+            '<div %s data-tree-id="%d" data-endpoint="%s" data-show-matches="%d"><noscript>This questionnaire needs JavaScript.</noscript></div>',
             get_block_wrapper_attributes(['class' => 'bdt-intake']),
             $treeId,
-            esc_url(rest_url('bdt/v1/intake'))
+            esc_url(rest_url('bdt/v1/intake')),
+            !empty($attributes['showMatches']) ? 1 : 0
         );
     }
 }

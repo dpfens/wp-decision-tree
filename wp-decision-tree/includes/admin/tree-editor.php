@@ -14,6 +14,16 @@ final class TreeEditor
     private const CAP  = 'manage_options';
     private const PAGE = 'bdt-trees';
 
+    private const TYPE_LABELS = [
+        BeerMenu::QUESTION_TYPE => 'Question',
+        BeerMenu::RESULT_TYPE   => 'Beer',
+        BeerMenu::POOL_TYPE     => 'Beer pool',
+    ];
+
+    private const OP_SYMBOLS = ['=' => '=', '!=' => '≠', '<' => '<', '<=' => '≤', '>' => '>', '>=' => '≥'];
+
+    private string $hook = '';
+
     public function __construct(
         private Repository $repo,
         private BeerMenu $menu,
@@ -25,6 +35,8 @@ final class TreeEditor
         // Priority 5 so the top-level menu exists before the Beers post type
         // and the other submenus attach to it.
         add_action('admin_menu', [$this, 'menu'], 5);
+        add_action('admin_enqueue_scripts', [$this, 'enqueue']);
+        add_action('admin_post_bdt_add_pool',     [$this, 'handleAddPool']);
         add_action('admin_post_bdt_create_tree',  [$this, 'handleCreateTree']);
         add_action('admin_post_bdt_add_question', [$this, 'handleAddQuestion']);
         add_action('admin_post_bdt_add_beer',     [$this, 'handleAddBeer']);
@@ -35,10 +47,115 @@ final class TreeEditor
 
     public function menu(): void
     {
-        add_menu_page(
+        $this->hook = (string) add_menu_page(
             'Decision Trees', 'Decision Trees', self::CAP,
             self::PAGE, [$this, 'render'], 'dashicons-randomize', 30
         );
+    }
+
+    /** Script and styles for the answer-filter builder on the editor screen. */
+    public function enqueue(string $hook): void
+    {
+        if ($hook !== $this->hook) {
+            return;
+        }
+
+        wp_register_script('bdt-tree-editor', false, [], BDT_VERSION, true);
+        wp_enqueue_script('bdt-tree-editor');
+        wp_add_inline_script('bdt-tree-editor', <<<'JS'
+(function () {
+    var box = document.querySelector('[data-bdt-filters]');
+    if (!box) { return; }
+
+    var attrs = JSON.parse(box.dataset.attrs || '[]');
+    var OPS = {
+        number:  ['=', '!=', '<', '<=', '>', '>='],
+        boolean: ['='],
+        enum:    ['=', '!='],
+        string:  ['=', '!=']
+    };
+    var LABELS = { '=': 'is', '!=': 'is not', '<': 'is less than', '<=': 'is at most', '>': 'is more than', '>=': 'is at least' };
+    var list = box.querySelector('.bdt-filter-list');
+    var next = 0;
+
+    function find(slug) {
+        return attrs.filter(function (a) { return a.slug === slug; })[0];
+    }
+
+    function addRow() {
+        var i = next++;
+        var li = document.createElement('li');
+        li.className = 'bdt-filter';
+
+        var sel = document.createElement('select');
+        sel.name = 'filters[' + i + '][attr]';
+        sel.setAttribute('aria-label', 'Attribute');
+        sel.add(new Option('Choose attribute…', ''));
+        attrs.forEach(function (a) { sel.add(new Option(a.label, a.slug)); });
+
+        var op = document.createElement('select');
+        op.name = 'filters[' + i + '][op]';
+        op.setAttribute('aria-label', 'Condition');
+
+        var val = document.createElement('span');
+        val.className = 'bdt-filter-value';
+
+        var rm = document.createElement('button');
+        rm.type = 'button';
+        rm.className = 'button-link button-link-delete';
+        rm.textContent = 'Remove';
+        rm.addEventListener('click', function () { li.remove(); });
+
+        function sync() {
+            var a = find(sel.value);
+            op.innerHTML = '';
+            val.innerHTML = '';
+            op.hidden = !a;
+            if (!a) { return; }
+
+            OPS[a.type].forEach(function (o) { op.add(new Option(LABELS[o], o)); });
+
+            var field;
+            if (a.type === 'enum') {
+                field = document.createElement('select');
+                a.options.forEach(function (o) { field.add(new Option(o, o)); });
+            } else if (a.type === 'boolean') {
+                field = document.createElement('select');
+                field.add(new Option('Yes', '1'));
+                field.add(new Option('No', '0'));
+            } else {
+                field = document.createElement('input');
+                field.type = a.type === 'number' ? 'number' : 'text';
+                if (a.type === 'number') { field.step = 'any'; field.className = 'small-text'; }
+            }
+            field.name = 'filters[' + i + '][value]';
+            field.setAttribute('aria-label', 'Value');
+            val.appendChild(field);
+
+            if (a.unit) {
+                var u = document.createElement('span');
+                u.className = 'description';
+                u.textContent = ' ' + a.unit;
+                val.appendChild(u);
+            }
+        }
+
+        sel.addEventListener('change', sync);
+        sync();
+
+        li.append(sel, ' ', op, ' ', val, ' ', rm);
+        list.appendChild(li);
+        sel.focus();
+    }
+
+    box.querySelector('.bdt-add-filter').addEventListener('click', addRow);
+})();
+JS);
+
+        wp_add_inline_style('common', <<<'CSS'
+.bdt-filter-list { margin: 0 0 .5em; padding: 0; list-style: none; }
+.bdt-filter { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 0 0 6px; }
+CSS);
     }
 
     /* ---------- Handlers ---------- */
@@ -60,7 +177,7 @@ final class TreeEditor
 
         $result = $prompt === ''
             ? new WP_Error('bdt_empty', 'Question text is required.')
-            : $this->repo->createNode($treeId, 'question', $prompt);
+            : $this->repo->createNode($treeId, BeerMenu::QUESTION_TYPE, $prompt);
 
         $this->finish($treeId, $result, 'Question added.');
     }
@@ -78,6 +195,20 @@ final class TreeEditor
             : new WP_Error('bdt_bad_beer', 'Choose a beer.');
 
         $this->finish($treeId, $result, 'Beer added to the tree.');
+    }
+
+    public function handleAddPool(): void
+    {
+        $treeId = absint($_POST['tree_id'] ?? 0);
+        $this->requireCapability('bdt_add_pool_' . $treeId);
+
+        $name = sanitize_text_field(wp_unslash($_POST['name'] ?? ''));
+
+        $this->finish(
+            $treeId,
+            $this->repo->createNode($treeId, BeerMenu::POOL_TYPE, $name !== '' ? $name : 'Matching beers'),
+            'Beer pool added.'
+        );
     }
 
     public function handleDeleteNode(): void
@@ -98,9 +229,38 @@ final class TreeEditor
             $treeId,
             absint($_POST['from_node_id'] ?? 0),
             absint($_POST['to_node_id'] ?? 0),
-            sanitize_text_field(wp_unslash($_POST['label'] ?? ''))
+            sanitize_text_field(wp_unslash($_POST['label'] ?? '')),
+            self::postedFilters()
         );
         $this->finish($treeId, $result, 'Connection added.');
+    }
+
+    /**
+     * Reads the posted filters[i][attr|op|value] rows. Only shape and
+     * sanitising happen here; Repository::normalizeFilters() validates them
+     * against the attribute definitions.
+     *
+     * @return array<int, array{attr:string, op:string, value:string}>
+     */
+    private static function postedFilters(): array
+    {
+        $raw = wp_unslash($_POST['filters'] ?? []);
+        if (!is_array($raw)) {
+            return [];
+        }
+
+        $rows = [];
+        foreach ($raw as $row) {
+            if (!is_array($row)) {
+                continue;
+            }
+            $rows[] = [
+                'attr'  => sanitize_key(is_string($row['attr'] ?? null) ? $row['attr'] : ''),
+                'op'    => is_string($row['op'] ?? null) ? $row['op'] : '',   // whitelisted by the repository
+                'value' => is_string($row['value'] ?? null) ? sanitize_text_field($row['value']) : '',
+            ];
+        }
+        return $rows;
     }
 
     public function handleDeleteEdge(): void
@@ -156,7 +316,7 @@ final class TreeEditor
     private function renderList(): void
     {
         $trees = $this->repo->listTrees();
-        $stats = $this->store->treeStats(BeerMenu::RESULT_TYPE);
+        $stats = $this->store->treeStats();
 
         $columns = [
             'questions'   => 'Questions',
@@ -222,6 +382,12 @@ final class TreeEditor
         $edges  = $this->repo->listEdges($treeId);
         $labels = $this->nodeLabels($nodes);
 
+        $attributes = $this->repo->listAttributes();
+        $bySlug     = [];
+        foreach ($attributes as $attr) {
+            $bySlug[$attr->slug] = $attr;
+        }
+
         $this->renderResults($treeId);
 
         /* Nodes */
@@ -238,7 +404,12 @@ final class TreeEditor
         foreach ($nodes as $n) {
             $id     = (int) $n->id;
             $isBeer = $n->node_type === BeerMenu::RESULT_TYPE;
+            $isPool = $n->node_type === BeerMenu::POOL_TYPE;
             $text   = esc_html($labels[$id]);
+
+            if ($isPool) {
+                $text .= '<br><span class="description">Every published beer that fits the answers given.</span>';
+            }
 
             if ($isBeer && $n->post_id) {
                 $editUrl = get_edit_post_link((int) $n->post_id, 'raw');
@@ -248,15 +419,17 @@ final class TreeEditor
             }
 
             echo '<tr><td>' . $id . '</td>'
-               . '<td>' . esc_html(ucfirst($n->node_type)) . '</td>'
+               . '<td>' . esc_html(self::TYPE_LABELS[$n->node_type] ?? ucfirst($n->node_type)) . '</td>'
                . '<td class="column-primary">' . $text . '</td><td>';
+            if ($isBeer) {
+                [$button, $confirm] = ['Remove', 'Remove this beer from the tree? The beer itself is not deleted.'];
+            } elseif ($isPool) {
+                [$button, $confirm] = ['Delete', 'Delete this beer pool and all its connections?'];
+            } else {
+                [$button, $confirm] = ['Delete', 'Delete this question and all its connections?'];
+            }
             $this->postForm('bdt_delete_node', 'bdt_delete_node_' . $id,
-                ['tree_id' => $treeId, 'node_id' => $id], '',
-                $isBeer ? 'Remove' : 'Delete',
-                $isBeer
-                    ? 'Remove this beer from the tree? The beer itself is not deleted.'
-                    : 'Delete this question and all its connections?',
-                'delete');
+                ['tree_id' => $treeId, 'node_id' => $id], '', $button, $confirm, 'delete');
             echo '</td></tr>';
         }
         echo '</tbody></table>';
@@ -270,6 +443,7 @@ final class TreeEditor
             'Add question', null, 'primary');
 
         $this->renderAddBeer($treeId, $nodes);
+        $this->renderAddPool($treeId);
 
         /* Connections */
         echo '<h2>Connections</h2>';
@@ -277,15 +451,17 @@ final class TreeEditor
            . '<th scope="col" class="column-primary">From</th>'
            . '<th scope="col">Answer</th>'
            . '<th scope="col">To</th>'
+           . '<th scope="col">Filters</th>'
            . '<th scope="col" style="width:8em">Actions</th>'
            . '</tr></thead><tbody>';
         if ($edges === []) {
-            echo $this->emptyRow(4, 'No connections yet.');
+            echo $this->emptyRow(5, 'No connections yet.');
         }
         foreach ($edges as $e) {
             echo '<tr><td class="column-primary">' . esc_html($labels[(int) $e->from_node_id] ?? '?') . '</td>'
                . '<td>' . esc_html($e->answer_label) . '</td>'
-               . '<td>' . esc_html($labels[(int) $e->to_node_id] ?? '?') . '</td><td>';
+               . '<td>' . esc_html($labels[(int) $e->to_node_id] ?? '?') . '</td>'
+               . '<td>' . esc_html($this->describeFilters($e->filters, $bySlug)) . '</td><td>';
             $this->postForm('bdt_delete_edge', 'bdt_delete_edge_' . (int) $e->id,
                 ['tree_id' => $treeId, 'edge_id' => (int) $e->id], '', 'Delete',
                 'Delete this connection?', 'delete');
@@ -293,8 +469,8 @@ final class TreeEditor
         }
         echo '</tbody></table>';
 
-        // Only questions can lead somewhere; beers are endpoints.
-        $questions = array_filter($nodes, static fn (object $n): bool => $n->node_type !== BeerMenu::RESULT_TYPE);
+        // Only questions can lead somewhere; beers and pools are endpoints.
+        $questions = array_filter($nodes, static fn (object $n): bool => $n->node_type === BeerMenu::QUESTION_TYPE);
 
         echo '<h3>Add connection</h3>';
         $this->postForm('bdt_add_edge', 'bdt_add_edge_' . $treeId, ['tree_id' => $treeId],
@@ -304,6 +480,8 @@ final class TreeEditor
                 ['Answer', '<input type="text" id="bdt-edge-label" name="label" class="regular-text">',
                     'bdt-edge-label', 'The answer a drinker picks to move from the first node to the second.'],
                 ['To', '<select id="bdt-edge-to" name="to_node_id">' . $this->nodeOptions($nodes, $labels) . '</select>', 'bdt-edge-to'],
+                ['Filters', $this->filtersEditor($attributes), '',
+                    'Optional. Beers shown at the end must satisfy the filters of every answer given on the way.'],
             ]),
             'Connect', null, 'primary');
 
@@ -323,14 +501,14 @@ final class TreeEditor
             $json = is_wp_error($resolved)
                 ? $resolved->get_error_message()
                 : wp_json_encode($resolved, JSON_PRETTY_PRINT);
-            echo '<p class="description">This is what visitors receive. Beers that are not published are left out.</p>';
+            echo '<p class="description">This is what visitors receive from this node. Unpublished beers are left out. The preview applies no answer filters, so pools show every published beer.</p>';
             echo '<p><textarea readonly rows="16" class="large-text code">' . esc_textarea((string) $json) . '</textarea></p>';
         }
     }
 
     private function renderResults(int $treeId): void
     {
-        $stats     = $this->store->treeStats(BeerMenu::RESULT_TYPE)[$treeId] ?? null;
+        $stats     = $this->store->treeStats()[$treeId] ?? null;
         $started   = (int) ($stats->started ?? 0);
         $completed = (int) ($stats->completed ?? 0);
 
@@ -388,7 +566,70 @@ final class TreeEditor
         printf('<p><a href="%s">Create a new beer</a></p>', esc_url($newUrl));
     }
 
+    private function renderAddPool(int $treeId): void
+    {
+        echo '<h3>Add beer pool</h3>';
+        $this->postForm('bdt_add_pool', 'bdt_add_pool_' . $treeId, ['tree_id' => $treeId],
+            $this->formTable([
+                ['Name', '<input type="text" id="bdt-pool-name" name="name" class="regular-text" placeholder="Matching beers">',
+                    'bdt-pool-name', 'A pool ends a path with every published beer that fits the visitor\'s answers, so new beers appear without editing the tree. Put filters on the connections that lead to it.'],
+            ]),
+            'Add beer pool', null, 'secondary');
+    }
+
     /* ---------- Helpers ---------- */
+
+    /**
+     * Repeater for answer filters. The rows are built by the inline script
+     * from the attribute definitions passed in data-attrs.
+     *
+     * @param object[] $attributes
+     */
+    private function filtersEditor(array $attributes): string
+    {
+        if ($attributes === []) {
+            $url = add_query_arg(['page' => \BeerTree\Beer\AttributesPage::PAGE], admin_url('admin.php'));
+            return '<p class="description">No attributes yet. <a href="' . esc_url($url) . '">Define attributes</a> to filter beers by them.</p>';
+        }
+
+        $data = array_map(static fn (object $a): array => [
+            'slug'    => $a->slug,
+            'label'   => $a->label,
+            'type'    => $a->value_type,
+            'unit'    => (string) $a->unit,
+            'options' => array_map('strval', json_decode((string) $a->enum_options, true) ?: []),
+        ], $attributes);
+
+        return '<div data-bdt-filters data-attrs="' . esc_attr((string) wp_json_encode($data)) . '">'
+             . '<ul class="bdt-filter-list"></ul>'
+             . '<button type="button" class="button bdt-add-filter">Add filter</button>'
+             . '</div>';
+    }
+
+    /**
+     * Readable summary of an edge's filters, e.g. "ABV ≤ 5 %; Style = IPA".
+     *
+     * @param array<string, object> $bySlug  attributes keyed by slug
+     */
+    private function describeFilters(?string $json, array $bySlug): string
+    {
+        $filters = json_decode((string) $json, true);
+        if (!is_array($filters) || $filters === []) {
+            return '';
+        }
+
+        $parts = [];
+        foreach ($filters as $f) {
+            $attr  = $bySlug[$f['attr'] ?? ''] ?? null;
+            $label = $attr ? $attr->label : ($f['attr'] ?? '?') . ' (deleted)';
+            $value = $f['value'] ?? '';
+            $value = is_bool($value) ? ($value ? 'Yes' : 'No') : (string) $value;
+            $unit  = $attr && $attr->unit ? ' ' . $attr->unit : '';
+
+            $parts[] = $label . ' ' . (self::OP_SYMBOLS[$f['op'] ?? ''] ?? '?') . ' ' . $value . $unit;
+        }
+        return implode('; ', $parts);
+    }
 
     /**
      * Display text for each node: the question text, or the beer post's title.

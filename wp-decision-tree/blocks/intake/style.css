@@ -14,3 +14,13 @@
 .bdt-intake .bdt-progress { margin: 0; font-size: .85em; text-transform: uppercase; letter-spacing: .05em; opacity: .7; }
 .bdt-intake .bdt-back { margin-top: 1em; margin-right: .5em; background: transparent; color: inherit; border: 1px solid currentColor; }
 .bdt-intake .bdt-option.is-selected { outline: 2px solid currentColor; outline-offset: 2px; }
+.bdt-intake .bdt-note { font-style: italic; opacity: .8; }
+
+.bdt-intake .bdt-matches { margin-top: 1.5em; padding-top: 1em; border-top: 1px solid rgba(0, 0, 0, .15); }
+.bdt-intake .bdt-matches-count { font-weight: 600; margin: 0 0 .5em; }
+.bdt-intake .bdt-matches-list { list-style: none; margin: 0 0 1em; padding: 0; display: grid; gap: .5em; max-height: 20em; overflow-y: auto; }
+.bdt-intake .bdt-match { display: flex; align-items: center; gap: .75em; }
+.bdt-intake .bdt-match img { width: 3em; height: 3em; object-fit: cover; border-radius: 4px; flex: none; }
+.bdt-intake .bdt-match-text { display: flex; flex-direction: column; min-width: 0; }
+.bdt-intake .bdt-match-attrs { font-size: .85em; opacity: .75; }
+.bdt-intake .bdt-matches-more { font-size: .85em; opacity: .75; margin: 0 0 1em; }

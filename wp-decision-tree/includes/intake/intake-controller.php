@@ -11,6 +11,11 @@ use WP_REST_Response;
  * Public REST API behind the intake block. The server owns the walk through
  * the tree: the client may only pick an edge that leaves the session's
  * current node, so it cannot skip questions or jump to a result.
+ *
+ * Requests carry `show_matches`, taken from the block's setting. When true,
+ * question steps also include the beers still reachable from where the
+ * visitor is. That data is no more sensitive than the final results, so the
+ * flag is trusted rather than stored per session.
  */
 final class IntakeController
 {
@@ -29,7 +34,9 @@ final class IntakeController
 
     public function routes(): void
     {
-        $token = ['type' => 'string', 'required' => true, 'pattern' => '^[a-f0-9]{64}$'];
+        $token   = ['type' => 'string', 'required' => true, 'pattern' => '^[a-f0-9]{64}$'];
+        $preview = ['type' => 'boolean', 'default' => false];
+        $nodeId  = ['type' => 'integer', 'required' => true, 'minimum' => 1];
 
         // Tree names for the block's picker in the editor.
         register_rest_route(self::NS, '/trees', [
@@ -38,36 +45,19 @@ final class IntakeController
             'permission_callback' => static fn (): bool => current_user_can('edit_posts'),
         ]);
 
-        register_rest_route(self::NS, '/intake/start', [
+        $public = fn (string $path, string $callback, array $args) => register_rest_route(self::NS, $path, [
             'methods'             => 'POST',
-            'callback'            => [$this, 'start'],
+            'callback'            => [$this, $callback],
             'permission_callback' => '__return_true',
-            'args'                => ['tree_id' => ['type' => 'integer', 'required' => true, 'minimum' => 1]],
+            'args'                => $args,
         ]);
 
-        register_rest_route(self::NS, '/intake/resume', [
-            'methods'             => 'POST',
-            'callback'            => [$this, 'resume'],
-            'permission_callback' => '__return_true',
-            'args'                => ['token' => $token],
-        ]);
-
-        register_rest_route(self::NS, '/intake/back', [
-            'methods'             => 'POST',
-            'callback'            => [$this, 'back'],
-            'permission_callback' => '__return_true',
-            'args'                => ['token' => $token],
-        ]);
-
-        register_rest_route(self::NS, '/intake/answer', [
-            'methods'             => 'POST',
-            'callback'            => [$this, 'answer'],
-            'permission_callback' => '__return_true',
-            'args'                => [
-                'token'      => $token,
-                'to_node_id' => ['type' => 'integer', 'required' => true, 'minimum' => 1],
-            ],
-        ]);
+        $public('/intake/start',  'start',  ['tree_id' => ['type' => 'integer', 'required' => true, 'minimum' => 1], 'show_matches' => $preview]);
+        $public('/intake/resume', 'resume', ['token' => $token, 'show_matches' => $preview]);
+        $public('/intake/answer', 'answer', ['token' => $token, 'to_node_id' => $nodeId, 'show_matches' => $preview]);
+        $public('/intake/back',   'back',   ['token' => $token, 'show_matches' => $preview]);
+        $public('/intake/finish', 'finish', ['token' => $token]);
+        $public('/intake/reopen', 'reopen', ['token' => $token, 'show_matches' => $preview]);
     }
 
     /* ---------- Endpoints ---------- */
@@ -93,7 +83,7 @@ final class IntakeController
             return $limited;
         }
 
-        $start = $this->store->getStartNode($treeId, BeerMenu::RESULT_TYPE);
+        $start = $this->store->getStartNode($treeId);
         if (!$start) {
             return new WP_Error('bdt_empty_tree', 'This questionnaire has no questions yet.', ['status' => 409]);
         }
@@ -105,13 +95,13 @@ final class IntakeController
         }
 
         $session = $this->store->getSessionByHash(hash('sha256', $token));
-        return $this->respond($session, ['token' => $token]);
+        return $this->respond($session, $this->wantsPreview($req), ['token' => $token]);
     }
 
     public function resume(WP_REST_Request $req): WP_REST_Response|WP_Error
     {
         $session = $this->sessionFrom($req);
-        return $session ? $this->respond($session) : $this->badSession();
+        return $session ? $this->respond($session, $this->wantsPreview($req)) : $this->badSession();
     }
 
     public function answer(WP_REST_Request $req): WP_REST_Response|WP_Error
@@ -139,7 +129,7 @@ final class IntakeController
         }
 
         $session->current_node_id = $to;
-        return $this->respond($session);
+        return $this->respond($session, $this->wantsPreview($req));
     }
 
     public function back(WP_REST_Request $req): WP_REST_Response|WP_Error
@@ -156,7 +146,33 @@ final class IntakeController
 
         $session->current_node_id = $nodeId;
         $session->finished_at     = null;
-        return $this->respond($session);
+        return $this->respond($session, $this->wantsPreview($req));
+    }
+
+    /** Ends the session where it stands and returns the full results. */
+    public function finish(WP_REST_Request $req): WP_REST_Response|WP_Error
+    {
+        $session = $this->sessionFrom($req);
+        if (!$session) {
+            return $this->badSession();
+        }
+
+        $this->store->finishSession((int) $session->id);
+        $session->finished_at = 'finished';
+        return $this->respond($session, false);
+    }
+
+    /** Picks up the questions again after stopping early. */
+    public function reopen(WP_REST_Request $req): WP_REST_Response|WP_Error
+    {
+        $session = $this->sessionFrom($req);
+        if (!$session) {
+            return $this->badSession();
+        }
+
+        $this->store->reopenSession((int) $session->id);
+        $session->finished_at = null;
+        return $this->respond($session, $this->wantsPreview($req));
     }
 
     /* ---------- Steps ---------- */
@@ -171,13 +187,121 @@ final class IntakeController
         return new WP_Error('bdt_bad_session', 'Your session has expired. Please start over.', ['status' => 404]);
     }
 
-    private function respond(object $session, array $extra = []): WP_REST_Response|WP_Error
+    private function wantsPreview(WP_REST_Request $req): bool
     {
-        $step = $this->stepFor($session);
+        return (bool) $req['show_matches'];
+    }
+
+    private function respond(object $session, bool $preview, array $extra = []): WP_REST_Response|WP_Error
+    {
+        $step = $this->stepFor($session, $preview);
         if (is_wp_error($step)) {
             return $step;
         }
         return rest_ensure_response($extra + ['step' => $step, 'trail' => $this->trail($session)]);
+    }
+
+    /**
+     * What the visitor gets: results if the session is finished (or the tree
+     * ran out of questions), otherwise the current question.
+     */
+    private function stepFor(object $session, bool $preview): array|WP_Error
+    {
+        $treeId = (int) $session->tree_id;
+        $nodeId = (int) $session->current_node_id;
+
+        $node = $this->repo->getNode($treeId, $nodeId);
+        if (!$node) {
+            return new WP_Error('bdt_gone', 'This questionnaire has changed. Please start over.', ['status' => 410]);
+        }
+
+        $edges = $this->repo->getEdgesFrom($treeId, $nodeId);
+        if ($session->finished_at !== null || $edges === []) {
+            // Questions remain if there are edges: the visitor stopped early.
+            return $this->finishedStep($session, $edges !== []);
+        }
+
+        $options = [];
+        foreach ($edges as $edge) {
+            $options[] = [
+                'node_id' => (int) $edge->to_node_id,
+                'label'   => $this->optionLabel($treeId, $edge),
+            ];
+        }
+
+        $step = [
+            'status'  => 'question',
+            'prompt'  => (string) $node->prompt,
+            'options' => $options,
+        ];
+        if ($preview) {
+            $step['matches'] = $this->potentialMatches($session);
+        }
+        return $step;
+    }
+
+    /**
+     * Beers still in play: reachable from the current question and satisfying
+     * the filters of the answers so far. Later answers can only narrow this.
+     * Light cards only; full content arrives with the final results.
+     */
+    private function potentialMatches(object $session): array
+    {
+        $sessionId = (int) $session->id;
+        $groups    = $this->store->filterGroupsForSessions([$sessionId])[$sessionId] ?? [];
+
+        $matched = $this->menu->matchingPostIds((int) $session->tree_id, (int) $session->current_node_id, $groups, false);
+        if (is_wp_error($matched)) {
+            return ['count' => 0, 'beers' => []];
+        }
+
+        $ids   = $matched['post_ids'];
+        $limit = max(1, (int) apply_filters('bdt_intake_preview_limit', 24));
+        $defs  = $this->attributeDefs();
+
+        $beers = [];
+        foreach ($this->menu->summaries(array_slice($ids, 0, $limit)) as $beer) {
+            $beers[] = [
+                'id'         => $beer['beer_id'],
+                'name'       => $beer['name'],
+                'image'      => $beer['image'],
+                'attributes' => $this->attributeRows($beer['attributes'], $defs),
+            ];
+        }
+
+        return ['count' => count($ids), 'beers' => $beers];
+    }
+
+    private function finishedStep(object $session, bool $stopped): array|WP_Error
+    {
+        $sessionId = (int) $session->id;
+        $groups    = $this->store->filterGroupsForSessions([$sessionId])[$sessionId] ?? [];
+
+        $resolved = $this->menu->forNode((int) $session->tree_id, (int) $session->current_node_id, $groups);
+        if (is_wp_error($resolved)) {
+            return $resolved;
+        }
+
+        $this->store->finishSession($sessionId);
+
+        $defs  = $this->attributeDefs();
+        $beers = [];
+        foreach ($resolved['beers'] as $beer) {
+            $beers[] = [
+                'id'         => $beer['beer_id'],
+                'name'       => $beer['name'],
+                'content'    => wp_kses_post($beer['content']),
+                'image'      => $beer['image'],
+                'attributes' => $this->attributeRows($beer['attributes'], $defs),
+            ];
+        }
+
+        return [
+            'status'  => 'done',
+            'stopped' => $stopped,
+            'relaxed' => $resolved['relaxed'] > 0,
+            'beers'   => $beers,
+        ];
     }
 
     /**
@@ -202,80 +326,38 @@ final class IntakeController
         return $out;
     }
 
-    /**
-     * A node with outgoing answers is a question. A node with none ends the
-     * walk and yields the beers at or beneath it.
-     */
-    private function stepFor(object $session): array|WP_Error
+    /** @return array<string, object> attribute definitions keyed by slug */
+    private function attributeDefs(): array
     {
-        $treeId = (int) $session->tree_id;
-        $nodeId = (int) $session->current_node_id;
-
-        $node = $this->repo->getNode($treeId, $nodeId);
-        if (!$node) {
-            return new WP_Error('bdt_gone', 'This questionnaire has changed. Please start over.', ['status' => 410]);
-        }
-
-        $edges = $this->repo->getEdgesFrom($treeId, $nodeId);
-        if ($edges === []) {
-            return $this->finishedStep($session);
-        }
-
-        $options = [];
-        foreach ($edges as $edge) {
-            $options[] = [
-                'node_id' => (int) $edge->to_node_id,
-                'label'   => $this->optionLabel($treeId, $edge),
-            ];
-        }
-
-        return [
-            'status'  => 'question',
-            'prompt'  => (string) $node->prompt,
-            'options' => $options,
-        ];
-    }
-
-    private function finishedStep(object $session): array|WP_Error
-    {
-        $resolved = $this->menu->forNode((int) $session->tree_id, (int) $session->current_node_id);
-        if (is_wp_error($resolved)) {
-            return $resolved;
-        }
-
-        $this->store->finishSession((int) $session->id);
-
         $defs = [];
         foreach ($this->repo->listAttributes() as $attr) {
             $defs[$attr->slug] = $attr;
         }
-
-        $beers = [];
-        foreach ($resolved['beers'] as $beer) {
-            $attributes = [];
-            foreach ($defs as $slug => $def) {
-                if (!array_key_exists($slug, $beer['attributes'])) {
-                    continue;
-                }
-                $attributes[] = [
-                    'label' => (string) $def->label,
-                    'value' => $this->formatValue($beer['attributes'][$slug]),
-                    'unit'  => (string) $def->unit,
-                ];
-            }
-            $beers[] = [
-                'id'         => $beer['beer_id'],
-                'name'       => $beer['name'],
-                'content'    => wp_kses_post($beer['content']),
-                'image'      => $beer['image'],
-                'attributes' => $attributes,
-            ];
-        }
-
-        return ['status' => 'done', 'beers' => $beers];
+        return $defs;
     }
 
-    /** The edge's answer text, or the destination's own text when the label was left blank. */
+    /**
+     * @param array<string, mixed>  $values  slug => typed value
+     * @param array<string, object> $defs
+     * @return array<int, array{label:string, value:string, unit:string}>
+     */
+    private function attributeRows(array $values, array $defs): array
+    {
+        $rows = [];
+        foreach ($defs as $slug => $def) {
+            if (!array_key_exists($slug, $values)) {
+                continue;
+            }
+            $rows[] = [
+                'label' => (string) $def->label,
+                'value' => $this->formatValue($values[$slug]),
+                'unit'  => (string) $def->unit,
+            ];
+        }
+        return $rows;
+    }
+
+    /** The edge's answer text, or the destination's own text when the label was blank. */
     private function optionLabel(int $treeId, object $edge): string
     {
         $label = trim((string) $edge->answer_label);

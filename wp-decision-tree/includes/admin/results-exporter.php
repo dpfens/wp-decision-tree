@@ -19,7 +19,8 @@ final class ResultsExporter
 
     public function __construct(
         private Repository $repo,
-        private IntakeStore $store
+        private IntakeStore $store,
+        private BeerMenu $menu
     ) {}
 
     public function register(): void
@@ -46,7 +47,6 @@ final class ResultsExporter
         $nodes       = $this->repo->listNodes($treeId);
         $labels      = $this->nodeLabels($nodes);
         $questionIds = $this->questionOrder($treeId, $nodes);
-        $graph       = $this->repo->loadGraph($treeId);
 
         $filename = sanitize_file_name(sprintf('%s-results-%s.csv', $treeName, gmdate('Y-m-d')));
 
@@ -70,16 +70,16 @@ final class ResultsExporter
         ]);
 
         $beerCache = [];
+        $titles    = [];
         $after     = 0;
         do {
             $sessions = $this->store->sessionsAfter($treeId, $after, self::BATCH);
             if ($sessions === []) {
                 break;
             }
-            $answers = $this->store->answersForSessions(array_map(
-                static fn (object $s): int => (int) $s->id,
-                $sessions
-            ));
+            $sessionIds = array_map(static fn (object $s): int => (int) $s->id, $sessions);
+            $answers    = $this->store->answersForSessions($sessionIds);
+            $groups     = $this->store->filterGroupsForSessions($sessionIds);
 
             foreach ($sessions as $session) {
                 $sid = (int) $session->id;
@@ -94,7 +94,7 @@ final class ResultsExporter
                     $row[] = $byQuestion[$qid] ?? '';
                 }
                 $row[] = $session->finished_at !== null
-                    ? $this->beerNames($treeId, (int) $session->current_node_id, $graph, $beerCache)
+                    ? $this->beerNames($treeId, (int) $session->current_node_id, $groups[$sid] ?? [], $beerCache, $titles)
                     : '';
 
                 $this->writeRow($out, $row);
@@ -115,7 +115,7 @@ final class ResultsExporter
     {
         $questions = [];
         foreach ($nodes as $n) {
-            if ($n->node_type !== BeerMenu::RESULT_TYPE) {
+            if ($n->node_type === BeerMenu::QUESTION_TYPE) {
                 $questions[(int) $n->id] = true;
             }
         }
@@ -153,40 +153,46 @@ final class ResultsExporter
     }
 
     /**
-     * Published beers at or beneath the node a session ended on, cached per node.
-     * Matches what visitors were shown: unpublished beers are left out.
+     * Beer names a session was shown: the beers at or beneath its final node,
+     * narrowed by the filters its answers carried. Cached per node and filter
+     * set; $titles caches post titles across rows.
+     *
+     * @param array<int, array<int, array{attr:string, op:string, value:mixed}>> $groups
+     * @param array<string, string>                                              $cache
+     * @param array<int, string>                                                 $titles
      */
-    private function beerNames(int $treeId, int $nodeId, \BeerTree\Graph $graph, array &$cache): string
+    private function beerNames(int $treeId, int $nodeId, array $groups, array &$cache, array &$titles): string
     {
-        if (isset($cache[$nodeId])) {
-            return $cache[$nodeId];
+        $key = $nodeId . ':' . md5((string) wp_json_encode($groups));
+        if (isset($cache[$key])) {
+            return $cache[$key];
         }
 
-        $ids  = $graph->hasNode($nodeId) ? [$nodeId, ...$graph->descendants($nodeId)] : [$nodeId];
-        $rows = $this->repo->getNodesByIds($treeId, $ids, BeerMenu::RESULT_TYPE);
+        $matched = $this->menu->matchingPostIds($treeId, $nodeId, $groups);
+        if (is_wp_error($matched)) {
+            return $cache[$key] = '';
+        }
 
-        $postIds = array_values(array_filter(array_map(static fn (object $r): int => (int) $r->post_id, $rows)));
-        $titles  = [];
-        if ($postIds) {
-            $posts = get_posts([
+        $missing = array_values(array_diff($matched['post_ids'], array_keys($titles)));
+        if ($missing) {
+            foreach (get_posts([
                 'post_type'      => BeerPostType::POST_TYPE,
                 'post_status'    => 'publish',
-                'post__in'       => $postIds,
+                'post__in'       => $missing,
                 'posts_per_page' => -1,
                 'no_found_rows'  => true,
-            ]);
-            foreach ($posts as $post) {
+            ]) as $post) {
                 $titles[(int) $post->ID] = $post->post_title !== '' ? $post->post_title : '(no title)';
             }
         }
 
         $names = [];
-        foreach ($rows as $r) {
-            if (isset($titles[(int) $r->post_id])) {
-                $names[] = $titles[(int) $r->post_id];
+        foreach ($matched['post_ids'] as $id) {
+            if (isset($titles[$id])) {
+                $names[] = $titles[$id];
             }
         }
-        return $cache[$nodeId] = implode('; ', $names);
+        return $cache[$key] = implode('; ', $names);
     }
 
     /** @return array<int, string> node ID => question text or beer title */

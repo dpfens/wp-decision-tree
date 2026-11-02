@@ -3,12 +3,13 @@
 
 	const { registerBlockType } = wp.blocks;
 	const { useBlockProps, InspectorControls } = wp.blockEditor;
-	const { PanelBody, SelectControl, Placeholder, Spinner, Notice } = wp.components;
+	const { PanelBody, SelectControl, ToggleControl, Placeholder, Spinner, Notice } = wp.components;
 	const { createElement: el, Fragment, useState, useEffect } = wp.element;
 	const apiFetch = wp.apiFetch;
 
 	function Edit( { attributes, setAttributes } ) {
 		const treeId = attributes.treeId || 0;
+		const showMatches = !! attributes.showMatches;
 		const [ trees, setTrees ] = useState( null );
 		const [ error, setError ] = useState( '' );
 
@@ -37,15 +38,25 @@
 			__nextHasNoMarginBottom: true,
 		} );
 
+		const matchesToggle = el( ToggleControl, {
+			label: 'Show matches while answering',
+			checked: showMatches,
+			onChange: ( v ) => setAttributes( { showMatches: !! v } ),
+			help: showMatches
+				? 'Each question lists the beers still in play, and visitors can stop and see full results at any time.'
+				: 'Visitors answer every question before seeing any beers.',
+			__nextHasNoMarginBottom: true,
+		} );
+
 		let body;
 		if ( error ) {
 			body = el( Notice, { status: 'error', isDismissible: false }, error );
 		} else if ( trees === null ) {
-			body = el( Placeholder, { label: 'Beer Decision Tree' }, el( Spinner ) );
+			body = el( Placeholder, { label: 'Decision Tree' }, el( Spinner ) );
 		} else if ( treeId === 0 || missing ) {
 			body = el(
 				Placeholder,
-				{ label: 'Beer Decision Tree', instructions: missing
+				{ label: 'Decision Tree', instructions: missing
 					? 'The selected tree no longer exists. Choose another.'
 					: 'Choose the decision tree visitors will walk through.' },
 				picker
@@ -53,14 +64,14 @@
 		} else {
 			body = el(
 				Placeholder,
-				{ label: 'Beer Decision Tree', instructions: 'Visitors will answer the questions in “' + selected.name + '” and see matching beers. The live questionnaire appears on the published page.' }
+				{ label: 'Decision Tree', instructions: 'Visitors will answer the questions in “' + selected.name + '” and see matching beers' + ( showMatches ? ', with a running list of matches as they go' : '' ) + '. The live questionnaire appears on the published page.' }
 			);
 		}
 
 		return el(
 			Fragment,
 			null,
-			el( InspectorControls, null, el( PanelBody, { title: 'Questionnaire' }, picker ) ),
+			el( InspectorControls, null, el( PanelBody, { title: 'Questionnaire' }, picker, matchesToggle ) ),
 			el( 'div', useBlockProps(), body )
 		);
 	}

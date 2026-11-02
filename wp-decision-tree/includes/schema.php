@@ -3,7 +3,7 @@ namespace BeerTree;
 
 final class Schema
 {
-    public const VERSION = '2';
+    public const VERSION = '3';
     public const OPTION  = 'bdt_db_version';
 
     public static function install(): void
@@ -43,12 +43,15 @@ final class Schema
   KEY post_id (post_id)
 ) $charset;");
 
+        // `filters` is a JSON list of attribute conditions the answer adds, e.g.
+        // [{"attr":"abv","op":"<=","value":5}]. NULL means the answer filters nothing.
         dbDelta("CREATE TABLE $edges (
   id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
   tree_id bigint(20) unsigned NOT NULL,
   from_node_id bigint(20) unsigned NOT NULL,
   to_node_id bigint(20) unsigned NOT NULL,
   answer_label varchar(255) NOT NULL DEFAULT '',
+  filters text NULL,
   sort_order int(11) NOT NULL DEFAULT 0,
   PRIMARY KEY  (id),
   UNIQUE KEY from_to (from_node_id, to_node_id),

@@ -23,6 +23,7 @@
 	function init( root ) {
 		const treeId = parseInt( root.dataset.treeId, 10 );
 		const endpoint = ( root.dataset.endpoint || '' ).replace( /\/$/, '' );
+		const showMatches = root.dataset.showMatches === '1';
 		const storeKey = 'bdt-intake-' + treeId;
 		let token = null;
 		let busy = false;
@@ -47,7 +48,7 @@
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				credentials: 'omit',
-				body: JSON.stringify( body ),
+				body: JSON.stringify( Object.assign( { show_matches: showMatches }, body ) ),
 			} );
 			let data = null;
 			try {
@@ -123,6 +124,46 @@
 			return card;
 		}
 
+		function attributeSummary( beer ) {
+			return beer.attributes
+				.slice( 0, 3 )
+				.map( ( a ) => a.label + ' ' + a.value + ( a.unit ? ' ' + a.unit : '' ) )
+				.join( ' · ' );
+		}
+
+		// Running list of beers still in play, with a way to stop and see them in full.
+		function matchesPanel( matches ) {
+			const count = matches.count;
+			const noun = count === 1 ? 'beer matches' : 'beers match';
+
+			if ( count === 0 ) {
+				return h( 'section', { class: 'bdt-matches' },
+					h( 'p', { class: 'bdt-matches-count' }, 'No beers match your answers so far.' )
+				);
+			}
+
+			const list = h( 'ul', { class: 'bdt-matches-list' }, matches.beers.map( ( b ) => {
+				const text = h( 'span', { class: 'bdt-match-text' }, h( 'strong', {}, b.name ) );
+				const summary = attributeSummary( b );
+				if ( summary ) {
+					text.append( h( 'span', { class: 'bdt-match-attrs' }, summary ) );
+				}
+				return h( 'li', { class: 'bdt-match' },
+					b.image ? h( 'img', { src: b.image, alt: '', loading: 'lazy' } ) : null,
+					text
+				);
+			} ) );
+
+			return h( 'section', { class: 'bdt-matches', 'aria-live': 'polite' },
+				h( 'p', { class: 'bdt-matches-count' }, count + ' ' + noun + ' so far' ),
+				list,
+				count > matches.beers.length
+					? h( 'p', { class: 'bdt-matches-more' }, 'Showing the first ' + matches.beers.length + '.' )
+					: null,
+				button( 'Show ' + ( count === 1 ? 'this beer' : 'these ' + count + ' beers' ), stopNow, 'bdt-stop' )
+			);
+		}
+
 		function show( data, moveFocus ) {
 			const step = data.step;
 			const trail = data.trail || [];
@@ -144,15 +185,21 @@
 					h( 'ul', { class: 'bdt-options' }, step.options.map( ( o ) =>
 						h( 'li', {}, button( o.label, () => answer( o.node_id ), 'bdt-option' ) )
 					) ),
-					backBtn
+					backBtn,
+					step.matches ? matchesPanel( step.matches ) : null
 				);
 			} else {
 				heading.append( step.beers.length ? 'Your matches' : 'No matches found' );
 				render(
 					trailEl,
 					heading,
+					step.relaxed && step.beers.length
+						? h( 'p', { class: 'bdt-note' }, 'Nothing matched all of your answers exactly, so these are the closest matches.' )
+						: null,
 					step.beers.map( beerCard ),
-					backBtn,
+					step.stopped
+						? button( 'Keep refining', reopen, 'bdt-back' )
+						: backBtn,
 					button( 'Start over', startOver, 'bdt-restart' )
 				);
 			}
@@ -188,6 +235,18 @@
 				const data = await api( '/start', { tree_id: treeId } );
 				saveToken( data.token );
 				show( data, true );
+			} );
+		}
+
+		function stopNow() {
+			return run( async () => {
+				show( await api( '/finish', { token } ), true );
+			} );
+		}
+
+		function reopen() {
+			return run( async () => {
+				show( await api( '/reopen', { token } ), true );
 			} );
 		}
 

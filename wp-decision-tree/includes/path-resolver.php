@@ -5,7 +5,7 @@ use WP_Error;
 
 /**
  * Structural view of a tree from one node: its answer options and every
- * result node reachable beneath it. Knows nothing about what a result
+ * result-type node (of the types the caller asks for) reachable beneath it. Knows nothing about what a result
  * means; the beer layer (BeerMenu) enriches results with post content
  * and attributes.
  */
@@ -17,10 +17,12 @@ final class PathResolver
      * @return array{
      *   node: array{id:int, type:string, prompt:string},
      *   options: array<int, array{label:string, node_id:int, sort_order:int}>,
-     *   results: array<int, array{id:int, post_id:int, prompt:string, sort_order:int}>
+     *   results: array<int, array{id:int, type:string, post_id:int, prompt:string, sort_order:int}>
      * }|WP_Error
+     *
+     * @param string[] $resultTypes  Node types that count as results
      */
-    public function resolve(int $treeId, int $nodeId, string $resultType): array|WP_Error
+    public function resolve(int $treeId, int $nodeId, array $resultTypes): array|WP_Error
     {
         $node = $this->repo->getNode($treeId, $nodeId);
         if ($node === null) {
@@ -36,10 +38,11 @@ final class PathResolver
         ], $this->repo->getEdgesFrom($treeId, $nodeId));
 
         $candidateIds = array_merge([$nodeId], $graph->descendants($nodeId));
-        $rows         = $this->repo->getNodesByIds($treeId, $candidateIds, $resultType);
+        $rows         = $this->repo->getNodesByIds($treeId, $candidateIds, $resultTypes);
 
         $results = array_map(static fn (object $row): array => [
             'id'         => (int) $row->id,
+            'type'       => (string) $row->node_type,
             'post_id'    => (int) $row->post_id,
             'prompt'     => (string) $row->prompt,
             'sort_order' => (int) $row->sort_order,

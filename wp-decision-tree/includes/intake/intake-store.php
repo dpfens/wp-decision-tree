@@ -1,6 +1,7 @@
 <?php
 namespace BeerTree\Intake;
 
+use BeerTree\Beer\BeerMenu;
 use WP_Error;
 use wpdb;
 
@@ -23,18 +24,18 @@ final class IntakeStore
     }
 
     /**
-     * The first question nobody points at: no incoming edges, not a result node.
-     * If a tree has several such roots, the lowest sort_order / ID wins.
+     * The first question nobody points at: a question node with no incoming
+     * edges. If a tree has several such roots, the lowest sort_order / ID wins.
      */
-    public function getStartNode(int $treeId, string $resultType): ?object
+    public function getStartNode(int $treeId): ?object
     {
         $row = $this->db->get_row($this->db->prepare(
             "SELECT n.id FROM {$this->t('nodes')} n
              LEFT JOIN {$this->t('edges')} e ON e.to_node_id = n.id AND e.tree_id = n.tree_id
-             WHERE n.tree_id = %d AND n.node_type <> %s AND e.id IS NULL
+             WHERE n.tree_id = %d AND n.node_type = %s AND e.id IS NULL
              ORDER BY n.sort_order ASC, n.id ASC
              LIMIT 1",
-            $treeId, $resultType
+            $treeId, BeerMenu::QUESTION_TYPE
         ));
         return $row ?: null;
     }
@@ -116,6 +117,17 @@ final class IntakeStore
         return true;
     }
 
+    /** Lets a visitor who stopped early carry on with the questions. */
+    public function reopenSession(int $sessionId): void
+    {
+        $this->db->query($this->db->prepare(
+            "UPDATE {$this->t('sessions')}
+             SET finished_at = NULL, last_activity = NOW()
+             WHERE id = %d",
+            $sessionId
+        ));
+    }
+
     /** Idempotent: only the first call sets finished_at. */
     public function finishSession(int $sessionId): void
     {
@@ -191,12 +203,12 @@ final class IntakeStore
      * @return array<int, object>  tree ID => questions, beers, connections,
      *                             started, completed, idle_seconds (null if no sessions)
      */
-    public function treeStats(string $resultType): array
+    public function treeStats(): array
     {
         $rows = $this->db->get_results($this->db->prepare(
             "SELECT t.id,
                 (SELECT COUNT(*) FROM {$this->t('nodes')} n
-                  WHERE n.tree_id = t.id AND n.node_type <> %s) AS questions,
+                  WHERE n.tree_id = t.id AND n.node_type = %s) AS questions,
                 (SELECT COUNT(*) FROM {$this->t('nodes')} n
                   WHERE n.tree_id = t.id AND n.node_type = %s) AS beers,
                 (SELECT COUNT(*) FROM {$this->t('edges')} e
@@ -208,7 +220,7 @@ final class IntakeStore
                 (SELECT TIMESTAMPDIFF(SECOND, MAX(s.last_activity), NOW())
                    FROM {$this->t('sessions')} s WHERE s.tree_id = t.id) AS idle_seconds
              FROM {$this->t('trees')} t",
-            $resultType, $resultType
+            BeerMenu::QUESTION_TYPE, BeerMenu::RESULT_TYPE
         )) ?: [];
 
         $out = [];
@@ -259,6 +271,39 @@ final class IntakeStore
         $out = [];
         foreach ($rows as $row) {
             $out[(int) $row->session_id][] = $row;
+        }
+        return $out;
+    }
+
+    /**
+     * The attribute filters carried by the answers each session gave, grouped
+     * per answer and oldest first. Answers with no filters are omitted.
+     *
+     * @param int[] $sessionIds
+     * @return array<int, array<int, array<int, array{attr:string, op:string, value:mixed}>>>
+     *         session ID => list of filter groups
+     */
+    public function filterGroupsForSessions(array $sessionIds): array
+    {
+        if ($sessionIds === []) {
+            return [];
+        }
+        $ph   = implode(',', array_fill(0, count($sessionIds), '%d'));
+        $rows = $this->db->get_results($this->db->prepare(
+            "SELECT r.session_id, e.filters
+             FROM {$this->t('responses')} r
+             INNER JOIN {$this->t('edges')} e ON e.id = r.edge_id
+             WHERE r.session_id IN ($ph) AND e.filters IS NOT NULL
+             ORDER BY r.id ASC",
+            ...array_map('intval', $sessionIds)
+        )) ?: [];
+
+        $out = [];
+        foreach ($rows as $row) {
+            $filters = json_decode((string) $row->filters, true);
+            if (is_array($filters) && $filters !== []) {
+                $out[(int) $row->session_id][] = $filters;
+            }
         }
         return $out;
     }
