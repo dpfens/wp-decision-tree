@@ -1,7 +1,7 @@
 <?php
-namespace BeerTree\Intake;
+namespace ItemTree\Intake;
 
-use BeerTree\Beer\BeerMenu;
+use ItemTree\Item\ItemMenu;
 use WP_Error;
 use wpdb;
 
@@ -35,7 +35,7 @@ final class IntakeStore
              WHERE n.tree_id = %d AND n.node_type = %s AND e.id IS NULL
              ORDER BY n.sort_order ASC, n.id ASC
              LIMIT 1",
-            $treeId, BeerMenu::QUESTION_TYPE
+            $treeId, ItemMenu::QUESTION_TYPE
         ));
         return $row ?: null;
     }
@@ -200,7 +200,7 @@ final class IntakeStore
      * idle_seconds is computed by the database so it uses the same clock that
      * wrote last_activity, whatever time zone that clock is in.
      *
-     * @return array<int, object>  tree ID => questions, beers, connections,
+     * @return array<int, object>  tree ID => questions, items, connections,
      *                             started, completed, idle_seconds (null if no sessions)
      */
     public function treeStats(): array
@@ -210,7 +210,7 @@ final class IntakeStore
                 (SELECT COUNT(*) FROM {$this->t('nodes')} n
                   WHERE n.tree_id = t.id AND n.node_type = %s) AS questions,
                 (SELECT COUNT(*) FROM {$this->t('nodes')} n
-                  WHERE n.tree_id = t.id AND n.node_type = %s) AS beers,
+                  WHERE n.tree_id = t.id AND n.node_type = %s) AS items,
                 (SELECT COUNT(*) FROM {$this->t('edges')} e
                   WHERE e.tree_id = t.id) AS connections,
                 (SELECT COUNT(*) FROM {$this->t('sessions')} s
@@ -220,7 +220,7 @@ final class IntakeStore
                 (SELECT TIMESTAMPDIFF(SECOND, MAX(s.last_activity), NOW())
                    FROM {$this->t('sessions')} s WHERE s.tree_id = t.id) AS idle_seconds
              FROM {$this->t('trees')} t",
-            BeerMenu::QUESTION_TYPE, BeerMenu::RESULT_TYPE
+            ItemMenu::QUESTION_TYPE, ItemMenu::RESULT_TYPE
         )) ?: [];
 
         $out = [];

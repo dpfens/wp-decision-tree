@@ -101,19 +101,19 @@
 			showStart();
 		}
 
-		function beerCard( beer ) {
-			const body = h( 'div', { class: 'bdt-beer-content' } );
-			body.innerHTML = beer.content; // sanitized with wp_kses_post on the server
+		function itemCard( item ) {
+			const body = h( 'div', { class: 'bdt-item-content' } );
+			body.innerHTML = item.content; // sanitized with wp_kses_post on the server
 
-			const card = h( 'article', { class: 'bdt-beer' } );
-			if ( beer.image ) {
-				card.append( h( 'img', { src: beer.image, alt: '', loading: 'lazy' } ) );
+			const card = h( 'article', { class: 'bdt-item' } );
+			if ( item.image ) {
+				card.append( h( 'img', { src: item.image, alt: '', loading: 'lazy' } ) );
 			}
-			card.append( h( 'h4', { class: 'bdt-beer-name' }, beer.name ), body );
+			card.append( h( 'h4', { class: 'bdt-item-name' }, item.name ), body );
 
-			if ( beer.attributes.length ) {
-				const list = h( 'dl', { class: 'bdt-beer-attributes' } );
-				beer.attributes.forEach( ( a ) => {
+			if ( item.attributes.length ) {
+				const list = h( 'dl', { class: 'bdt-item-attributes' } );
+				item.attributes.forEach( ( a ) => {
 					list.append(
 						h( 'dt', {}, a.label ),
 						h( 'dd', {}, a.unit ? a.value + ' ' + a.unit : a.value )
@@ -124,25 +124,25 @@
 			return card;
 		}
 
-		function attributeSummary( beer ) {
-			return beer.attributes
+		function attributeSummary( item ) {
+			return item.attributes
 				.slice( 0, 3 )
 				.map( ( a ) => a.label + ' ' + a.value + ( a.unit ? ' ' + a.unit : '' ) )
 				.join( ' · ' );
 		}
 
-		// Running list of beers still in play, with a way to stop and see them in full.
+		// Running list of items still in play, with a way to stop and see them in full.
 		function matchesPanel( matches ) {
 			const count = matches.count;
-			const noun = count === 1 ? 'beer matches' : 'beers match';
+			const noun = count === 1 ? 'item matches' : 'items match';
 
 			if ( count === 0 ) {
 				return h( 'section', { class: 'bdt-matches' },
-					h( 'p', { class: 'bdt-matches-count' }, 'No beers match your answers so far.' )
+					h( 'p', { class: 'bdt-matches-count' }, 'No items match your answers so far.' )
 				);
 			}
 
-			const list = h( 'ul', { class: 'bdt-matches-list' }, matches.beers.map( ( b ) => {
+			const list = h( 'ul', { class: 'bdt-matches-list' }, matches.items.map( ( b ) => {
 				const text = h( 'span', { class: 'bdt-match-text' }, h( 'strong', {}, b.name ) );
 				const summary = attributeSummary( b );
 				if ( summary ) {
@@ -157,10 +157,10 @@
 			return h( 'section', { class: 'bdt-matches', 'aria-live': 'polite' },
 				h( 'p', { class: 'bdt-matches-count' }, count + ' ' + noun + ' so far' ),
 				list,
-				count > matches.beers.length
-					? h( 'p', { class: 'bdt-matches-more' }, 'Showing the first ' + matches.beers.length + '.' )
+				count > matches.items.length
+					? h( 'p', { class: 'bdt-matches-more' }, 'Showing the first ' + matches.items.length + '.' )
 					: null,
-				button( 'Show ' + ( count === 1 ? 'this beer' : 'these ' + count + ' beers' ), stopNow, 'bdt-stop' )
+				button( 'Show ' + ( count === 1 ? 'this item' : 'these ' + count + ' items' ), stopNow, 'bdt-stop' )
 			);
 		}
 
@@ -189,14 +189,14 @@
 					step.matches ? matchesPanel( step.matches ) : null
 				);
 			} else {
-				heading.append( step.beers.length ? 'Your matches' : 'No matches found' );
+				heading.append( step.items.length ? 'Your matches' : 'No matches found' );
 				render(
 					trailEl,
 					heading,
-					step.relaxed && step.beers.length
+					step.relaxed && step.items.length
 						? h( 'p', { class: 'bdt-note' }, 'Nothing matched all of your answers exactly, so these are the closest matches.' )
 						: null,
-					step.beers.map( beerCard ),
+					step.items.map( itemCard ),
 					step.stopped
 						? button( 'Keep refining', reopen, 'bdt-back' )
 						: backBtn,

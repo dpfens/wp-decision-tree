@@ -1,10 +1,10 @@
 <?php
-namespace BeerTree\Admin;
+namespace ItemTree\Admin;
 
-use BeerTree\Beer\BeerMenu;
-use BeerTree\Beer\BeerPostType;
-use BeerTree\Intake\IntakeStore;
-use BeerTree\Repository;
+use ItemTree\Item\ItemMenu;
+use ItemTree\Item\ItemPostType;
+use ItemTree\Intake\IntakeStore;
+use ItemTree\Repository;
 use WP_Error;
 
 final class TreeEditor
@@ -15,9 +15,9 @@ final class TreeEditor
     private const PAGE = 'bdt-trees';
 
     private const TYPE_LABELS = [
-        BeerMenu::QUESTION_TYPE => 'Question',
-        BeerMenu::RESULT_TYPE   => 'Beer',
-        BeerMenu::POOL_TYPE     => 'Beer pool',
+        ItemMenu::QUESTION_TYPE => 'Question',
+        ItemMenu::RESULT_TYPE   => 'Item',
+        ItemMenu::POOL_TYPE     => 'Item pool',
     ];
 
     private const OP_SYMBOLS = ['=' => '=', '!=' => '≠', '<' => '<', '<=' => '≤', '>' => '>', '>=' => '≥'];
@@ -26,20 +26,20 @@ final class TreeEditor
 
     public function __construct(
         private Repository $repo,
-        private BeerMenu $menu,
+        private ItemMenu $menu,
         private IntakeStore $store
     ) {}
 
     public function register(): void
     {
-        // Priority 5 so the top-level menu exists before the Beers post type
+        // Priority 5 so the top-level menu exists before the Items post type
         // and the other submenus attach to it.
         add_action('admin_menu', [$this, 'menu'], 5);
         add_action('admin_enqueue_scripts', [$this, 'enqueue']);
         add_action('admin_post_bdt_add_pool',     [$this, 'handleAddPool']);
         add_action('admin_post_bdt_create_tree',  [$this, 'handleCreateTree']);
         add_action('admin_post_bdt_add_question', [$this, 'handleAddQuestion']);
-        add_action('admin_post_bdt_add_beer',     [$this, 'handleAddBeer']);
+        add_action('admin_post_bdt_add_item',     [$this, 'handleAddItem']);
         add_action('admin_post_bdt_delete_node',  [$this, 'handleDeleteNode']);
         add_action('admin_post_bdt_add_edge',     [$this, 'handleAddEdge']);
         add_action('admin_post_bdt_delete_edge',  [$this, 'handleDeleteEdge']);
@@ -177,24 +177,24 @@ CSS);
 
         $result = $prompt === ''
             ? new WP_Error('bdt_empty', 'Question text is required.')
-            : $this->repo->createNode($treeId, BeerMenu::QUESTION_TYPE, $prompt);
+            : $this->repo->createNode($treeId, ItemMenu::QUESTION_TYPE, $prompt);
 
         $this->finish($treeId, $result, 'Question added.');
     }
 
-    public function handleAddBeer(): void
+    public function handleAddItem(): void
     {
         $treeId = absint($_POST['tree_id'] ?? 0);
-        $this->requireCapability('bdt_add_beer_' . $treeId);
+        $this->requireCapability('bdt_add_item_' . $treeId);
 
         $postId = absint($_POST['post_id'] ?? 0);
         $post   = $postId > 0 ? get_post($postId) : null;
 
-        $result = ($post && $post->post_type === BeerPostType::POST_TYPE)
-            ? $this->repo->createNode($treeId, BeerMenu::RESULT_TYPE, '', $postId)
-            : new WP_Error('bdt_bad_beer', 'Choose a beer.');
+        $result = ($post && $post->post_type === ItemPostType::POST_TYPE)
+            ? $this->repo->createNode($treeId, ItemMenu::RESULT_TYPE, '', $postId)
+            : new WP_Error('bdt_bad_item', 'Choose an item.');
 
-        $this->finish($treeId, $result, 'Beer added to the tree.');
+        $this->finish($treeId, $result, 'Item added to the tree.');
     }
 
     public function handleAddPool(): void
@@ -206,8 +206,8 @@ CSS);
 
         $this->finish(
             $treeId,
-            $this->repo->createNode($treeId, BeerMenu::POOL_TYPE, $name !== '' ? $name : 'Matching beers'),
-            'Beer pool added.'
+            $this->repo->createNode($treeId, ItemMenu::POOL_TYPE, $name !== '' ? $name : 'Matching items'),
+            'Item pool added.'
         );
     }
 
@@ -320,7 +320,7 @@ CSS);
 
         $columns = [
             'questions'   => 'Questions',
-            'beers'       => 'Beers',
+            'items'       => 'Items',
             'connections' => 'Connections',
             'started'     => 'Started',
             'completed'   => 'Completed',
@@ -349,7 +349,7 @@ CSS);
 
             $cells = [
                 'Questions'     => (string) ($s->questions ?? 0),
-                'Beers'         => (string) ($s->beers ?? 0),
+                'Items'         => (string) ($s->items ?? 0),
                 'Connections'   => (string) ($s->connections ?? 0),
                 'Started'       => (string) $started,
                 'Completed'     => (string) $completed,
@@ -403,15 +403,17 @@ CSS);
         }
         foreach ($nodes as $n) {
             $id     = (int) $n->id;
-            $isBeer = $n->node_type === BeerMenu::RESULT_TYPE;
-            $isPool = $n->node_type === BeerMenu::POOL_TYPE;
+            $isItem = $n->node_type === ItemMenu::RESULT_TYPE;
+            $isPool = $n->node_type === ItemMenu::POOL_TYPE;
             $text   = esc_html($labels[$id]);
 
             if ($isPool) {
-                $text .= '<br><span class="description">Every published beer that fits the answers given.</span>';
+                $text .= '<br><span class="description">'
+                       . esc_html__('Every published item that fits the answers given. Set filters on the connections that lead here.', 'item-decision-tree')
+                       . '</span>';
             }
 
-            if ($isBeer && $n->post_id) {
+            if ($isItem && $n->post_id) {
                 $editUrl = get_edit_post_link((int) $n->post_id, 'raw');
                 if ($editUrl) {
                     $text = '<a href="' . esc_url($editUrl) . '">' . $text . '</a>';
@@ -421,10 +423,10 @@ CSS);
             echo '<tr><td>' . $id . '</td>'
                . '<td>' . esc_html(self::TYPE_LABELS[$n->node_type] ?? ucfirst($n->node_type)) . '</td>'
                . '<td class="column-primary">' . $text . '</td><td>';
-            if ($isBeer) {
-                [$button, $confirm] = ['Remove', 'Remove this beer from the tree? The beer itself is not deleted.'];
+            if ($isItem) {
+                [$button, $confirm] = ['Remove', 'Remove this item from the tree? The item itself is not deleted.'];
             } elseif ($isPool) {
-                [$button, $confirm] = ['Delete', 'Delete this beer pool and all its connections?'];
+                [$button, $confirm] = ['Delete', 'Delete this item pool and all its connections?'];
             } else {
                 [$button, $confirm] = ['Delete', 'Delete this question and all its connections?'];
             }
@@ -442,7 +444,7 @@ CSS);
             ]),
             'Add question', null, 'primary');
 
-        $this->renderAddBeer($treeId, $nodes);
+        $this->renderAddItem($treeId, $nodes);
         $this->renderAddPool($treeId);
 
         /* Connections */
@@ -469,8 +471,8 @@ CSS);
         }
         echo '</tbody></table>';
 
-        // Only questions can lead somewhere; beers and pools are endpoints.
-        $questions = array_filter($nodes, static fn (object $n): bool => $n->node_type === BeerMenu::QUESTION_TYPE);
+        // Only questions can lead somewhere; items and pools are endpoints.
+        $questions = array_filter($nodes, static fn (object $n): bool => $n->node_type === ItemMenu::QUESTION_TYPE);
 
         echo '<h3>Add connection</h3>';
         $this->postForm('bdt_add_edge', 'bdt_add_edge_' . $treeId, ['tree_id' => $treeId],
@@ -481,7 +483,7 @@ CSS);
                     'bdt-edge-label', 'The answer a drinker picks to move from the first node to the second.'],
                 ['To', '<select id="bdt-edge-to" name="to_node_id">' . $this->nodeOptions($nodes, $labels) . '</select>', 'bdt-edge-to'],
                 ['Filters', $this->filtersEditor($attributes), '',
-                    'Optional. Beers shown at the end must satisfy the filters of every answer given on the way.'],
+                    'Optional. Items shown at the end must satisfy the filters of every answer given on the way.'],
             ]),
             'Connect', null, 'primary');
 
@@ -501,7 +503,7 @@ CSS);
             $json = is_wp_error($resolved)
                 ? $resolved->get_error_message()
                 : wp_json_encode($resolved, JSON_PRETTY_PRINT);
-            echo '<p class="description">This is what visitors receive from this node. Unpublished beers are left out. The preview applies no answer filters, so pools show every published beer.</p>';
+            echo '<p class="description">This is what visitors receive from this node. Unpublished items are left out. The preview applies no answer filters, so pools show every published item.</p>';
             echo '<p><textarea readonly rows="16" class="large-text code">' . esc_textarea((string) $json) . '</textarea></p>';
         }
     }
@@ -519,15 +521,15 @@ CSS);
     }
 
     /** @param object[] $nodes */
-    private function renderAddBeer(int $treeId, array $nodes): void
+    private function renderAddItem(int $treeId, array $nodes): void
     {
         $inTree = array_map('intval', array_filter(
             array_column($nodes, 'post_id'),
             static fn ($v): bool => $v !== null
         ));
 
-        $beers = get_posts([
-            'post_type'      => BeerPostType::POST_TYPE,
+        $items = get_posts([
+            'post_type'      => ItemPostType::POST_TYPE,
             'post_status'    => ['publish', 'future', 'pending', 'draft', 'private'],
             'post__not_in'   => $inTree,
             'posts_per_page' => -1,
@@ -536,45 +538,63 @@ CSS);
             'no_found_rows'  => true,
         ]);
 
-        $newUrl = admin_url('post-new.php?post_type=' . BeerPostType::POST_TYPE);
+        $newUrl = admin_url('post-new.php?post_type=' . ItemPostType::POST_TYPE);
 
-        echo '<h3>Add beer</h3>';
+        echo '<h3>Add item</h3>';
 
-        if ($beers === []) {
-            printf('<p>No more beers to add. <a href="%s">Create a beer</a> first.</p>', esc_url($newUrl));
+        if ($items === []) {
+            printf('<p>No more items to add. <a href="%s">Create an item</a> first.</p>', esc_url($newUrl));
             return;
         }
 
         $options = '';
-        foreach ($beers as $beer) {
+        foreach ($items as $item) {
             $suffix = '';
-            if ($beer->post_status !== 'publish') {
-                $status = get_post_status_object($beer->post_status);
-                $suffix = ' — ' . ($status->label ?? $beer->post_status);
+            if ($item->post_status !== 'publish') {
+                $status = get_post_status_object($item->post_status);
+                $suffix = ' — ' . ($status->label ?? $item->post_status);
             }
             $options .= sprintf('<option value="%d">%s</option>',
-                (int) $beer->ID, esc_html(($beer->post_title !== '' ? $beer->post_title : '(no title)') . $suffix));
+                (int) $item->ID, esc_html(($item->post_title !== '' ? $item->post_title : '(no title)') . $suffix));
         }
 
-        $this->postForm('bdt_add_beer', 'bdt_add_beer_' . $treeId, ['tree_id' => $treeId],
+        $this->postForm('bdt_add_item', 'bdt_add_item_' . $treeId, ['tree_id' => $treeId],
             $this->formTable([
-                ['Beer', '<select id="bdt-beer" name="post_id">' . $options . '</select>', 'bdt-beer',
-                    'Beers are shared across trees. Only published beers are shown to visitors.'],
+                ['Item', '<select id="bdt-item" name="post_id">' . $options . '</select>', 'bdt-item',
+                    'Items are shared across trees. Only published items are shown to visitors.'],
             ]),
-            'Add beer', null, 'primary');
+            'Add item', null, 'primary');
 
-        printf('<p><a href="%s">Create a new beer</a></p>', esc_url($newUrl));
+        printf('<p><a href="%s">Create a new item</a></p>', esc_url($newUrl));
     }
 
     private function renderAddPool(int $treeId): void
     {
-        echo '<h3>Add beer pool</h3>';
+        echo '<h3>' . esc_html__('Add item pool', 'item-decision-tree') . '</h3>';
+        echo '<p>' . esc_html__(
+            'An item pool ends a path without choosing specific items. Instead it offers every published item, narrowed by the filters on the answers the visitor gave on the way. For example, if the answer “Budget-friendly” filters Price to at most 20, a pool at the end of that path shows every published item priced 20 or less.',
+            'item-decision-tree'
+        ) . '</p>';
+        echo '<p>' . esc_html__(
+            'Use a pool when results should keep up with your catalog: new items appear automatically, and drafted or trashed items drop out, with no changes to the tree. To hand-pick exactly what a path leads to, add item nodes instead.',
+            'item-decision-tree'
+        ) . '</p>';
+        echo '<ul class="ul-disc">';
+        foreach ([
+            __('With no filters on the path, a pool shows every published item.', 'item-decision-tree'),
+            __('If a path also reaches individual item nodes, those are listed first, then pool items by title, with no duplicates.', 'item-decision-tree'),
+            __('If nothing matches every answer, filters from the most recent answers are dropped one at a time until something does, and the visitor is told these are the closest matches.', 'item-decision-tree'),
+            __('This is separate from the block’s “Show matches while answering” setting, which only controls the running list during the questions.', 'item-decision-tree'),
+        ] as $point) {
+            echo '<li>' . esc_html($point) . '</li>';
+        }
+        echo '</ul>';
         $this->postForm('bdt_add_pool', 'bdt_add_pool_' . $treeId, ['tree_id' => $treeId],
             $this->formTable([
-                ['Name', '<input type="text" id="bdt-pool-name" name="name" class="regular-text" placeholder="Matching beers">',
-                    'bdt-pool-name', 'A pool ends a path with every published beer that fits the visitor\'s answers, so new beers appear without editing the tree. Put filters on the connections that lead to it.'],
+                ['Name', '<input type="text" id="bdt-pool-name" name="name" class="regular-text" placeholder="Matching items">',
+                    'bdt-pool-name', __('Shown here in the editor. If a connection to this pool has no answer text, visitors see this name on the answer button instead.', 'item-decision-tree')],
             ]),
-            'Add beer pool', null, 'secondary');
+            'Add item pool', null, 'secondary');
     }
 
     /* ---------- Helpers ---------- */
@@ -588,8 +608,8 @@ CSS);
     private function filtersEditor(array $attributes): string
     {
         if ($attributes === []) {
-            $url = add_query_arg(['page' => \BeerTree\Beer\AttributesPage::PAGE], admin_url('admin.php'));
-            return '<p class="description">No attributes yet. <a href="' . esc_url($url) . '">Define attributes</a> to filter beers by them.</p>';
+            $url = add_query_arg(['page' => \ItemTree\Item\AttributesPage::PAGE], admin_url('admin.php'));
+            return '<p class="description">No attributes yet. <a href="' . esc_url($url) . '">Define attributes</a> to filter items by them.</p>';
         }
 
         $data = array_map(static fn (object $a): array => [
@@ -632,7 +652,7 @@ CSS);
     }
 
     /**
-     * Display text for each node: the question text, or the beer post's title.
+     * Display text for each node: the question text, or the item post's title.
      *
      * @param object[] $nodes
      * @return array<int, string>  node ID => label
@@ -647,7 +667,7 @@ CSS);
         $titles = [];
         if ($postIds) {
             $posts = get_posts([
-                'post_type'      => BeerPostType::POST_TYPE,
+                'post_type'      => ItemPostType::POST_TYPE,
                 'post_status'    => 'any',
                 'post__in'       => $postIds,
                 'posts_per_page' => -1,
@@ -661,7 +681,7 @@ CSS);
         $labels = [];
         foreach ($nodes as $n) {
             $labels[(int) $n->id] = $n->post_id
-                ? ($titles[(int) $n->post_id] ?? '(unavailable beer)')
+                ? ($titles[(int) $n->post_id] ?? '(unavailable item)')
                 : (string) $n->prompt;
         }
         return $labels;

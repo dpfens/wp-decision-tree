@@ -1,15 +1,15 @@
 <?php
-namespace BeerTree\Admin;
+namespace ItemTree\Admin;
 
-use BeerTree\Beer\BeerMenu;
-use BeerTree\Beer\BeerPostType;
-use BeerTree\CycleException;
-use BeerTree\Intake\IntakeStore;
-use BeerTree\Repository;
+use ItemTree\Item\ItemMenu;
+use ItemTree\Item\ItemPostType;
+use ItemTree\CycleException;
+use ItemTree\Intake\IntakeStore;
+use ItemTree\Repository;
 
 /**
  * Streams a tree's visitor results as CSV: one row per session, one column
- * per question (in tree order), plus the beers that session ended on.
+ * per question (in tree order), plus the items that session ended on.
  */
 final class ResultsExporter
 {
@@ -20,7 +20,7 @@ final class ResultsExporter
     public function __construct(
         private Repository $repo,
         private IntakeStore $store,
-        private BeerMenu $menu
+        private ItemMenu $menu
     ) {}
 
     public function register(): void
@@ -66,10 +66,10 @@ final class ResultsExporter
         $this->writeRow($out, [
             'Session ID', 'Started', 'Last activity', 'Finished',
             ...$this->questionHeaders($questionIds, $labels),
-            'Recommended beers',
+            'Recommended items',
         ]);
 
-        $beerCache = [];
+        $itemCache = [];
         $titles    = [];
         $after     = 0;
         do {
@@ -94,7 +94,7 @@ final class ResultsExporter
                     $row[] = $byQuestion[$qid] ?? '';
                 }
                 $row[] = $session->finished_at !== null
-                    ? $this->beerNames($treeId, (int) $session->current_node_id, $groups[$sid] ?? [], $beerCache, $titles)
+                    ? $this->itemNames($treeId, (int) $session->current_node_id, $groups[$sid] ?? [], $itemCache, $titles)
                     : '';
 
                 $this->writeRow($out, $row);
@@ -115,7 +115,7 @@ final class ResultsExporter
     {
         $questions = [];
         foreach ($nodes as $n) {
-            if ($n->node_type === BeerMenu::QUESTION_TYPE) {
+            if ($n->node_type === ItemMenu::QUESTION_TYPE) {
                 $questions[(int) $n->id] = true;
             }
         }
@@ -153,7 +153,7 @@ final class ResultsExporter
     }
 
     /**
-     * Beer names a session was shown: the beers at or beneath its final node,
+     * Item names a session was shown: the items at or beneath its final node,
      * narrowed by the filters its answers carried. Cached per node and filter
      * set; $titles caches post titles across rows.
      *
@@ -161,7 +161,7 @@ final class ResultsExporter
      * @param array<string, string>                                              $cache
      * @param array<int, string>                                                 $titles
      */
-    private function beerNames(int $treeId, int $nodeId, array $groups, array &$cache, array &$titles): string
+    private function itemNames(int $treeId, int $nodeId, array $groups, array &$cache, array &$titles): string
     {
         $key = $nodeId . ':' . md5((string) wp_json_encode($groups));
         if (isset($cache[$key])) {
@@ -176,7 +176,7 @@ final class ResultsExporter
         $missing = array_values(array_diff($matched['post_ids'], array_keys($titles)));
         if ($missing) {
             foreach (get_posts([
-                'post_type'      => BeerPostType::POST_TYPE,
+                'post_type'      => ItemPostType::POST_TYPE,
                 'post_status'    => 'publish',
                 'post__in'       => $missing,
                 'posts_per_page' => -1,
@@ -195,7 +195,7 @@ final class ResultsExporter
         return $cache[$key] = implode('; ', $names);
     }
 
-    /** @return array<int, string> node ID => question text or beer title */
+    /** @return array<int, string> node ID => question text or item title */
     private function nodeLabels(array $nodes): array
     {
         $postIds = array_values(array_filter(array_map(
@@ -206,7 +206,7 @@ final class ResultsExporter
         $titles = [];
         if ($postIds) {
             foreach (get_posts([
-                'post_type'      => BeerPostType::POST_TYPE,
+                'post_type'      => ItemPostType::POST_TYPE,
                 'post_status'    => 'any',
                 'post__in'       => $postIds,
                 'posts_per_page' => -1,

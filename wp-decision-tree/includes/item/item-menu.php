@@ -1,26 +1,26 @@
 <?php
-namespace BeerTree\Beer;
+namespace ItemTree\Item;
 
-use BeerTree\PathResolver;
-use BeerTree\Repository;
+use ItemTree\PathResolver;
+use ItemTree\Repository;
 use WP_Error;
 use WP_Post;
 
 /**
- * Beer-specific view over the generic tree. Works out which beers a visitor
+ * Item-specific view over the generic tree. Works out which items a visitor
  * gets at a node and enriches them: the post supplies the name, rich content
  * and image, and the attribute tables supply the typed details.
  *
- * Candidate beers come from two kinds of end node: a beer node names one
- * beer, and a pool node stands for every published beer. Answer filters
+ * Candidate items come from two kinds of end node: an item node names one
+ * item, and a pool node stands for every published item. Answer filters
  * (attribute conditions collected along the visitor's path) then narrow the
- * candidates. Only published beers are ever included, so setting a beer to
+ * candidates. Only published items are ever included, so setting an item to
  * draft or trash removes it from every tree without touching the tree itself.
  */
-final class BeerMenu
+final class ItemMenu
 {
     public const QUESTION_TYPE = 'question';
-    public const RESULT_TYPE   = 'beer';
+    public const RESULT_TYPE   = 'item';
     public const POOL_TYPE     = 'pool';
 
     public function __construct(
@@ -42,8 +42,8 @@ final class BeerMenu
      *   question: string,
      *   options: array,
      *   relaxed: int,
-     *   beers: array<int, array{
-     *     beer_id:int, name:string, content:string,
+     *   items: array<int, array{
+     *     item_id:int, name:string, content:string,
      *     image:?string, attributes:array<string,mixed>
      *   }>
      * }|WP_Error
@@ -61,15 +61,15 @@ final class BeerMenu
         $posts  = $this->postsById($postIds);
         $values = $this->repo->getValuesForPosts($postIds);
 
-        $beers = [];
+        $items = [];
         foreach ($postIds as $postId) {
             $post = $posts[$postId] ?? null;
             if ($post === null) {
                 continue;
             }
 
-            $beers[] = [
-                'beer_id'    => $postId,
+            $items[] = [
+                'item_id'    => $postId,
                 'name'       => $post->post_title,
                 'content'    => (string) apply_filters('the_content', $post->post_content),
                 'image'      => get_the_post_thumbnail_url($post, 'large') ?: null,
@@ -81,12 +81,12 @@ final class BeerMenu
             'question' => $resolved['node']['prompt'],
             'options'  => $resolved['options'],
             'relaxed'  => $matched['relaxed'],
-            'beers'    => $beers,
+            'items'    => $items,
         ];
     }
 
     /**
-     * Just the IDs: published beer posts for a node after filtering, in
+     * Just the IDs: published item posts for a node after filtering, in
      * display order. Cheap enough for reports; forNode() adds the content.
      * With $relax false, an empty result stays empty instead of dropping
      * filters, which is what a "matches so far" preview wants.
@@ -104,11 +104,11 @@ final class BeerMenu
     }
 
     /**
-     * Light cards for a list of beer IDs: no rendered content, a medium image.
-     * Used for previews, where full content for every beer would be heavy.
+     * Light cards for a list of item IDs: no rendered content, a medium image.
+     * Used for previews, where full content for every item would be heavy.
      *
      * @param int[] $postIds
-     * @return array<int, array{beer_id:int, name:string, image:?string, attributes:array<string,mixed>}>
+     * @return array<int, array{item_id:int, name:string, image:?string, attributes:array<string,mixed>}>
      */
     public function summaries(array $postIds): array
     {
@@ -122,7 +122,7 @@ final class BeerMenu
                 continue;
             }
             $out[] = [
-                'beer_id'    => $postId,
+                'item_id'    => $postId,
                 'name'       => $post->post_title,
                 'image'      => get_the_post_thumbnail_url($post, 'medium') ?: null,
                 'attributes' => $values[$postId] ?? [],
@@ -148,7 +148,7 @@ final class BeerMenu
             }
         }
 
-        // Hand-placed beers first, in tree order; pool beers after, by title.
+        // Hand-placed items first, in tree order; pool items after, by title.
         $candidates = $this->publishedIds(array_values(array_unique($explicit)));
         if ($hasPool) {
             $candidates = [...$candidates, ...array_values(array_diff($this->allPublishedIds(), $candidates))];
@@ -197,7 +197,7 @@ final class BeerMenu
             return [];
         }
         return array_map('intval', get_posts([
-            'post_type'      => BeerPostType::POST_TYPE,
+            'post_type'      => ItemPostType::POST_TYPE,
             'post_status'    => 'publish',
             'post__in'       => $postIds,
             'posts_per_page' => -1,
@@ -207,11 +207,11 @@ final class BeerMenu
         ]));
     }
 
-    /** @return int[] every published beer, by title */
+    /** @return int[] every published item, by title */
     private function allPublishedIds(): array
     {
         return array_map('intval', get_posts([
-            'post_type'      => BeerPostType::POST_TYPE,
+            'post_type'      => ItemPostType::POST_TYPE,
             'post_status'    => 'publish',
             'posts_per_page' => -1,
             'orderby'        => 'title',
@@ -233,7 +233,7 @@ final class BeerMenu
 
         $out = [];
         foreach (get_posts([
-            'post_type'      => BeerPostType::POST_TYPE,
+            'post_type'      => ItemPostType::POST_TYPE,
             'post_status'    => 'publish',
             'post__in'       => $postIds,
             'posts_per_page' => -1,

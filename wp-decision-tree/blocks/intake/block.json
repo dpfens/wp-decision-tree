@@ -5,8 +5,8 @@
     "title": "Decision Tree",
     "category": "widgets",
     "icon": "randomize",
-    "description": "A guided questionnaire that walks visitors through a decision tree to beer recommendations.",
-    "keywords": ["beer", "quiz", "questionnaire", "decision tree"],
+    "description": "A guided questionnaire that walks visitors through a decision tree to item recommendations.",
+    "keywords": ["item", "quiz", "questionnaire", "decision tree"],
     "attributes": {
         "treeId": { "type": "integer", "default": 0 },
         "showMatches": { "type": "boolean", "default": false }

@@ -43,8 +43,8 @@
 			checked: showMatches,
 			onChange: ( v ) => setAttributes( { showMatches: !! v } ),
 			help: showMatches
-				? 'Each question lists the beers still in play, and visitors can stop and see full results at any time.'
-				: 'Visitors answer every question before seeing any beers.',
+    ? __( 'Each question lists the items still in play, and visitors can stop and see full results at any time. This only controls the running list; which items can match is decided by the tree’s item nodes and pools.', 'item-decision-tree' )
+    : __( 'Visitors answer every question before seeing any items. This only controls the running list; which items can match is decided by the tree’s item nodes and pools.', 'item-decision-tree' ),
 			__nextHasNoMarginBottom: true,
 		} );
 
@@ -64,7 +64,7 @@
 		} else {
 			body = el(
 				Placeholder,
-				{ label: 'Decision Tree', instructions: 'Visitors will answer the questions in “' + selected.name + '” and see matching beers' + ( showMatches ? ', with a running list of matches as they go' : '' ) + '. The live questionnaire appears on the published page.' }
+				{ label: 'Decision Tree', instructions: 'Visitors will answer the questions in “' + selected.name + '” and see matching items' + ( showMatches ? ', with a running list of matches as they go' : '' ) + '. The live questionnaire appears on the published page.' }
 			);
 		}
 

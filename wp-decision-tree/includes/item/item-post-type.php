@@ -1,20 +1,20 @@
 <?php
-namespace BeerTree\Beer;
+namespace ItemTree\Item;
 
-use BeerTree\Repository;
+use ItemTree\Repository;
 use WP_Post;
 
 /**
- * Beers are posts: the title is the beer's name, the editor holds its rich
+ * Items are posts: the title is the item's name, the editor holds its rich
  * description, and the featured image is its photo. Typed details (ABV,
  * style, and so on) live in the plugin's attribute tables, keyed by post ID.
  *
  * Registered on every request, not just in admin, so that permanently
- * deleting a beer from cron or WP-CLI still cleans up its tree nodes.
+ * deleting an item from cron or WP-CLI still cleans up its tree nodes.
  */
-final class BeerPostType
+final class ItemPostType
 {
-    public const POST_TYPE = 'bdt_beer';
+    public const POST_TYPE = 'bdt_item';
 
     /** Admin menu slug of the parent screen this type is listed under. */
     private const PARENT_MENU = 'bdt-trees';
@@ -31,21 +31,21 @@ final class BeerPostType
     {
         register_post_type(self::POST_TYPE, [
             'labels' => [
-                'name'               => 'Beers',
-                'singular_name'      => 'Beer',
+                'name'               => 'Items',
+                'singular_name'      => 'Item',
                 'add_new'            => 'Add New',
-                'add_new_item'       => 'Add New Beer',
-                'edit_item'          => 'Edit Beer',
-                'new_item'           => 'New Beer',
-                'view_item'          => 'View Beer',
-                'search_items'       => 'Search Beers',
-                'not_found'          => 'No beers found.',
-                'not_found_in_trash' => 'No beers found in Trash.',
-                'all_items'          => 'Beers',
-                'item_published'     => 'Beer published.',
-                'item_updated'       => 'Beer updated.',
+                'add_new_item'       => 'Add New Item',
+                'edit_item'          => 'Edit Item',
+                'new_item'           => 'New Item',
+                'view_item'          => 'View Item',
+                'search_items'       => 'Search Items',
+                'not_found'          => 'No items found.',
+                'not_found_in_trash' => 'No items found in Trash.',
+                'all_items'          => 'Items',
+                'item_published'     => 'Item published.',
+                'item_updated'       => 'Item updated.',
             ],
-            // No front-end URLs of its own; beers appear through the trees.
+            // No front-end URLs of its own; items appear through the trees.
             'public'              => false,
             'publicly_queryable'  => false,
             'exclude_from_search' => true,
@@ -63,7 +63,7 @@ final class BeerPostType
         ]);
     }
 
-    /** Removes tree nodes, edges and attribute values when a beer is permanently deleted. */
+    /** Removes tree nodes, edges and attribute values when an item is permanently deleted. */
     public function cleanup(int $postId, WP_Post $post): void
     {
         if ($post->post_type === self::POST_TYPE) {

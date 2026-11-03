@@ -1,6 +1,6 @@
 <?php
-use BeerTree\CycleException;
-use BeerTree\Graph;
+use ItemTree\CycleException;
+use ItemTree\Graph;
 use PHPUnit\Framework\TestCase;
 
 require_once __DIR__ . '/../includes/graph.php';

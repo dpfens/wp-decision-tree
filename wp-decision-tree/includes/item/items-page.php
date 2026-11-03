@@ -1,48 +1,48 @@
 <?php
-namespace BeerTree\Beer;
+namespace ItemTree\Item;
 
-use BeerTree\Admin\PostFormHelpers;
-use BeerTree\Repository;
+use ItemTree\Admin\PostFormHelpers;
+use ItemTree\Repository;
 use WP_Error;
 
-/** Edits attribute values for beer nodes within a tree. */
-final class BeersPage
+/** Edits attribute values for item nodes within a tree. */
+final class ItemsPage
 {
     use PostFormHelpers;
 
-    public const PAGE = 'bdt-beers';
+    public const PAGE = 'bdt-items';
 
     public function __construct(private Repository $repo) {}
 
     public function register(): void
     {
         add_action('admin_menu', [$this, 'menu']);
-        add_action('admin_post_bdt_save_beer', [$this, 'handleSave']);
+        add_action('admin_post_bdt_save_item', [$this, 'handleSave']);
     }
 
     public function menu(): void
     {
-        add_submenu_page('bdt-trees', 'Beers', 'Beers', 'manage_options', self::PAGE, [$this, 'render']);
+        add_submenu_page('bdt-trees', 'Items', 'Items', 'manage_options', self::PAGE, [$this, 'render']);
     }
 
     public function handleSave(): void
     {
         $treeId = absint($_POST['tree_id'] ?? 0);
         $nodeId = absint($_POST['node_id'] ?? 0);
-        $this->requireCapability('bdt_save_beer_' . $nodeId);
+        $this->requireCapability('bdt_save_item_' . $nodeId);
 
         $input  = wp_unslash($_POST['attr'] ?? []);
         $result = $this->saveAttributes($treeId, $nodeId, is_array($input) ? $input : []);
 
-        $this->redirectWithNotice(self::PAGE, ['tree' => $treeId], $result, 'Beer saved.');
+        $this->redirectWithNotice(self::PAGE, ['tree' => $treeId], $result, 'Item saved.');
     }
 
     /** @param array<string, mixed> $input  Submitted attr[] values keyed by slug */
     private function saveAttributes(int $treeId, int $nodeId, array $input): true|WP_Error
     {
         $node = $this->repo->getNode($treeId, $nodeId);
-        if (!$node || $node->node_type !== BeerMenu::RESULT_TYPE) {
-            return new WP_Error('bdt_not_found', 'Beer not found in this tree.');
+        if (!$node || $node->node_type !== ItemMenu::RESULT_TYPE) {
+            return new WP_Error('bdt_not_found', 'Item not found in this tree.');
         }
 
         foreach ($this->repo->listAttributes() as $attr) {
@@ -74,11 +74,11 @@ final class BeersPage
         }
         $treeId = absint($_GET['tree'] ?? 0);
 
-        $this->openWrap('Beers');
+        $this->openWrap('Items');
         $this->renderTreePicker($treeId);
 
         if ($treeId > 0) {
-            $this->renderBeers($treeId);
+            $this->renderItems($treeId);
         }
         echo '</div>';
     }
@@ -99,15 +99,15 @@ final class BeersPage
            . '</div></div></form><br class="clear">';
     }
 
-    private function renderBeers(int $treeId): void
+    private function renderItems(int $treeId): void
     {
-        $beers = array_values(array_filter(
+        $items = array_values(array_filter(
             $this->repo->listNodes($treeId),
-            static fn (object $n): bool => $n->node_type === BeerMenu::RESULT_TYPE
+            static fn (object $n): bool => $n->node_type === ItemMenu::RESULT_TYPE
         ));
 
-        if ($beers === []) {
-            $this->infoNotice('No beers in this tree yet. Add beer nodes in the Decision Trees editor.');
+        if ($items === []) {
+            $this->infoNotice('No items in this tree yet. Add item nodes in the Decision Trees editor.');
             return;
         }
 
@@ -119,10 +119,10 @@ final class BeersPage
             return;
         }
 
-        $values = $this->repo->getValuesForNodes(array_map(static fn ($b): int => (int) $b->id, $beers));
+        $values = $this->repo->getValuesForNodes(array_map(static fn ($b): int => (int) $b->id, $items));
 
-        foreach ($beers as $beer) {
-            $id      = (int) $beer->id;
+        foreach ($items as $item) {
+            $id      = (int) $item->id;
             $current = $values[$id] ?? [];
 
             $rows = [];
@@ -131,10 +131,10 @@ final class BeersPage
             }
 
             echo '<div class="postbox"><div class="postbox-header"><h2 class="hndle">'
-               . esc_html($beer->prompt) . '</h2></div><div class="inside">';
-            $this->postForm('bdt_save_beer', 'bdt_save_beer_' . $id,
+               . esc_html($item->prompt) . '</h2></div><div class="inside">';
+            $this->postForm('bdt_save_item', 'bdt_save_item_' . $id,
                 ['tree_id' => $treeId, 'node_id' => $id],
-                $this->formTable($rows), 'Save beer', null, 'primary');
+                $this->formTable($rows), 'Save item', null, 'primary');
             echo '</div></div>';
         }
     }

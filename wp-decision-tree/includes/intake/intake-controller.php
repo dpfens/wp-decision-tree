@@ -1,8 +1,8 @@
 <?php
-namespace BeerTree\Intake;
+namespace ItemTree\Intake;
 
-use BeerTree\Beer\BeerMenu;
-use BeerTree\Repository;
+use ItemTree\Item\ItemMenu;
+use ItemTree\Repository;
 use WP_Error;
 use WP_REST_Request;
 use WP_REST_Response;
@@ -13,7 +13,7 @@ use WP_REST_Response;
  * current node, so it cannot skip questions or jump to a result.
  *
  * Requests carry `show_matches`, taken from the block's setting. When true,
- * question steps also include the beers still reachable from where the
+ * question steps also include the items still reachable from where the
  * visitor is. That data is no more sensitive than the final results, so the
  * flag is trusted rather than stored per session.
  */
@@ -23,7 +23,7 @@ final class IntakeController
 
     public function __construct(
         private Repository $repo,
-        private BeerMenu $menu,
+        private ItemMenu $menu,
         private IntakeStore $store
     ) {}
 
@@ -241,7 +241,7 @@ final class IntakeController
     }
 
     /**
-     * Beers still in play: reachable from the current question and satisfying
+     * Items still in play: reachable from the current question and satisfying
      * the filters of the answers so far. Later answers can only narrow this.
      * Light cards only; full content arrives with the final results.
      */
@@ -252,24 +252,24 @@ final class IntakeController
 
         $matched = $this->menu->matchingPostIds((int) $session->tree_id, (int) $session->current_node_id, $groups, false);
         if (is_wp_error($matched)) {
-            return ['count' => 0, 'beers' => []];
+            return ['count' => 0, 'items' => []];
         }
 
         $ids   = $matched['post_ids'];
         $limit = max(1, (int) apply_filters('bdt_intake_preview_limit', 24));
         $defs  = $this->attributeDefs();
 
-        $beers = [];
-        foreach ($this->menu->summaries(array_slice($ids, 0, $limit)) as $beer) {
-            $beers[] = [
-                'id'         => $beer['beer_id'],
-                'name'       => $beer['name'],
-                'image'      => $beer['image'],
-                'attributes' => $this->attributeRows($beer['attributes'], $defs),
+        $items = [];
+        foreach ($this->menu->summaries(array_slice($ids, 0, $limit)) as $item) {
+            $items[] = [
+                'id'         => $item['item_id'],
+                'name'       => $item['name'],
+                'image'      => $item['image'],
+                'attributes' => $this->attributeRows($item['attributes'], $defs),
             ];
         }
 
-        return ['count' => count($ids), 'beers' => $beers];
+        return ['count' => count($ids), 'items' => $items];
     }
 
     private function finishedStep(object $session, bool $stopped): array|WP_Error
@@ -285,14 +285,14 @@ final class IntakeController
         $this->store->finishSession($sessionId);
 
         $defs  = $this->attributeDefs();
-        $beers = [];
-        foreach ($resolved['beers'] as $beer) {
-            $beers[] = [
-                'id'         => $beer['beer_id'],
-                'name'       => $beer['name'],
-                'content'    => wp_kses_post($beer['content']),
-                'image'      => $beer['image'],
-                'attributes' => $this->attributeRows($beer['attributes'], $defs),
+        $items = [];
+        foreach ($resolved['items'] as $item) {
+            $items[] = [
+                'id'         => $item['item_id'],
+                'name'       => $item['name'],
+                'content'    => wp_kses_post($item['content']),
+                'image'      => $item['image'],
+                'attributes' => $this->attributeRows($item['attributes'], $defs),
             ];
         }
 
@@ -300,7 +300,7 @@ final class IntakeController
             'status'  => 'done',
             'stopped' => $stopped,
             'relaxed' => $resolved['relaxed'] > 0,
-            'beers'   => $beers,
+            'items'   => $items,
         ];
     }
 

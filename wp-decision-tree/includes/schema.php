@@ -1,9 +1,9 @@
 <?php
-namespace BeerTree;
+namespace ItemTree;
 
 final class Schema
 {
-    public const VERSION = '3';
+    public const VERSION = '4';
     public const OPTION  = 'bdt_db_version';
 
     public static function install(): void
@@ -25,9 +25,9 @@ final class Schema
 
         // dbDelta is strict: two spaces before PRIMARY KEY, no inline SQL comments.
         //
-        // Question nodes carry their text in `prompt`. Result nodes (beers)
-        // leave `prompt` empty and point at a bdt_beer post through `post_id`,
-        // which holds the title, rich content and image. A beer can appear
+        // Question nodes carry their text in `prompt`. Result nodes (items)
+        // leave `prompt` empty and point at a bdt_item post through `post_id`,
+        // which holds the title, rich content and image. An item can appear
         // once per tree; NULL post_ids (questions) do not collide in the
         // unique key.
         dbDelta("CREATE TABLE $nodes (
@@ -60,7 +60,7 @@ final class Schema
 ) $charset;");
 
         $attrs  = $wpdb->prefix . 'bdt_attributes';
-        $values = $wpdb->prefix . 'bdt_beer_values';
+        $values = $wpdb->prefix . 'bdt_item_values';
 
         dbDelta("CREATE TABLE $attrs (
   id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
@@ -73,7 +73,7 @@ final class Schema
   UNIQUE KEY slug (slug)
 ) $charset;");
 
-        // Attribute values belong to a beer post, not to a tree node.
+        // Attribute values belong to an item post, not to a tree node.
         dbDelta("CREATE TABLE $values (
   id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
   post_id bigint(20) unsigned NOT NULL,

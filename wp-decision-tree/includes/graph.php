@@ -1,5 +1,5 @@
 <?php
-namespace BeerTree;
+namespace ItemTree;
 
 use InvalidArgumentException;
 use RuntimeException;
@@ -184,7 +184,7 @@ final class Graph
 
     /**
      * Every node reachable from $id, excluding $id itself. Use this to
-     * gather the beer-result nodes under whatever branch the user has reached.
+     * gather the item-result nodes under whatever branch the user has reached.
      *
      * @return int[]
      */

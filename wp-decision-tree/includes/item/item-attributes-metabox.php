@@ -1,35 +1,35 @@
 <?php
-namespace BeerTree\Beer;
+namespace ItemTree\Item;
 
-use BeerTree\Admin\PostFormHelpers;
-use BeerTree\Repository;
+use ItemTree\Admin\PostFormHelpers;
+use ItemTree\Repository;
 use WP_Post;
 
-/** Typed attribute fields (ABV, style, ...) on the beer edit screen. */
-final class BeerAttributesMetabox
+/** Typed attribute fields (ABV, style, ...) on the item edit screen. */
+final class ItemAttributesMetabox
 {
     use PostFormHelpers;
 
-    private const NONCE_ACTION = 'bdt_save_beer_attributes';
-    private const NONCE_FIELD  = 'bdt_beer_attributes_nonce';
+    private const NONCE_ACTION = 'bdt_save_item_attributes';
+    private const NONCE_FIELD  = 'bdt_item_attributes_nonce';
     private const FIELD_NAME   = 'bdt_attr';
 
     public function __construct(private Repository $repo) {}
 
     public function register(): void
     {
-        add_action('add_meta_boxes_' . BeerPostType::POST_TYPE, [$this, 'addMetabox']);
-        add_action('save_post_' . BeerPostType::POST_TYPE, [$this, 'save']);
+        add_action('add_meta_boxes_' . ItemPostType::POST_TYPE, [$this, 'addMetabox']);
+        add_action('save_post_' . ItemPostType::POST_TYPE, [$this, 'save']);
         add_action('admin_notices', [$this, 'showErrors']);
     }
 
     public function addMetabox(): void
     {
         add_meta_box(
-            'bdt-beer-attributes',
-            'Beer details',
+            'bdt-item-attributes',
+            'Item details',
             [$this, 'render'],
-            BeerPostType::POST_TYPE,
+            ItemPostType::POST_TYPE,
             'normal',
             'high'
         );
@@ -104,7 +104,7 @@ final class BeerAttributesMetabox
     public function showErrors(): void
     {
         $screen = get_current_screen();
-        if (!$screen || $screen->post_type !== BeerPostType::POST_TYPE) {
+        if (!$screen || $screen->post_type !== ItemPostType::POST_TYPE) {
             return;
         }
         $errors = get_transient($this->errorKey());
@@ -120,7 +120,7 @@ final class BeerAttributesMetabox
 
     private function errorKey(): string
     {
-        return 'bdt_beer_errors_' . get_current_user_id();
+        return 'bdt_item_errors_' . get_current_user_id();
     }
 
     /**

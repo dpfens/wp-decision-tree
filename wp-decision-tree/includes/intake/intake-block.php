@@ -1,5 +1,5 @@
 <?php
-namespace BeerTree\Intake;
+namespace ItemTree\Intake;
 
 /**
  * Registers the bdt/intake block. The admin picks a tree in the editor; the
@@ -29,7 +29,7 @@ final class IntakeBlock
         if ($treeId === 0 || !$this->store->treeExists($treeId)) {
             // Visitors see nothing; people who can fix it see why.
             return current_user_can('edit_posts')
-                ? '<p class="bdt-intake-notice"><em>Beer Decision Tree: choose a tree in the block settings.</em></p>'
+                ? '<p class="bdt-intake-notice"><em>Item Decision Tree: choose a tree in the block settings.</em></p>'
                 : '';
         }
 

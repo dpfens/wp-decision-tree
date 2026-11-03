@@ -1,12 +1,12 @@
 <?php
-namespace BeerTree;
+namespace ItemTree;
 
 use WP_Error;
 
 /**
  * Structural view of a tree from one node: its answer options and every
  * result-type node (of the types the caller asks for) reachable beneath it. Knows nothing about what a result
- * means; the beer layer (BeerMenu) enriches results with post content
+ * means; the item layer (ItemMenu) enriches results with post content
  * and attributes.
  */
 final class PathResolver

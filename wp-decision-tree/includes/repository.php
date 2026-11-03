@@ -1,5 +1,5 @@
 <?php
-namespace BeerTree;
+namespace ItemTree;
 
 use WP_Error;
 use wpdb;
@@ -28,7 +28,7 @@ final class Repository
 
     private function valueTable(): string
     {
-        return $this->table('beer_values');
+        return $this->table('item_values');
     }
 
     /* ---------- Graph ---------- */
@@ -96,7 +96,7 @@ final class Repository
                 $treeId, $postId
             ));
             if ($existing) {
-                return new WP_Error('bdt_dup_beer', 'That beer is already in this tree.');
+                return new WP_Error('bdt_dup_item', 'That item is already in this tree.');
             }
         }
 
@@ -181,7 +181,7 @@ final class Repository
     }
 
     /**
-     * Removes everything that refers to a beer post: its nodes in every tree,
+     * Removes everything that refers to an item post: its nodes in every tree,
      * the edges touching those nodes, and its attribute values. Called when
      * the post is permanently deleted.
      */
@@ -211,7 +211,7 @@ final class Repository
         if (!$ok) {
             $error = $this->db->last_error;
             $this->db->query('ROLLBACK');
-            return new WP_Error('bdt_db_error', $error ?: 'Could not clean up beer data.');
+            return new WP_Error('bdt_db_error', $error ?: 'Could not clean up item data.');
         }
 
         $this->db->query('COMMIT');
@@ -223,7 +223,7 @@ final class Repository
     /**
      * Adds an answer edge after checking that both nodes belong to the tree
      * and that the edge would not create a cycle. $filters are attribute
-     * conditions the answer adds to the visitor's beer search; see
+     * conditions the answer adds to the visitor's item search; see
      * normalizeFilters() for the accepted shape.
      *
      * @return int|WP_Error  New edge ID
@@ -366,7 +366,7 @@ final class Repository
     }
 
     /**
-     * How many beers use each choice of an attribute.
+     * How many items use each choice of an attribute.
      *
      * @return array<string, int>  option => count
      */
@@ -487,10 +487,10 @@ final class Repository
         return true;
     }
 
-    /* ---------- Beer attribute values ---------- */
+    /* ---------- Item attribute values ---------- */
 
     /**
-     * Loads all attributes for a set of beer posts in one query.
+     * Loads all attributes for a set of item posts in one query.
      *
      * @param int[] $postIds
      * @return array<int, array<string, mixed>>  postId => [slug => typed value]
@@ -583,8 +583,8 @@ final class Repository
     }
 
     /**
-     * Beer post IDs that satisfy every condition (see normalizeFilters for
-     * the shape). A beer with no value for a condition's attribute does not
+     * Item post IDs that satisfy every condition (see normalizeFilters for
+     * the shape). An item with no value for a condition's attribute does not
      * match it. Conditions that name an attribute which has since been
      * deleted are ignored.
      *
@@ -637,7 +637,7 @@ final class Repository
     }
 
     /**
-     * Sets one attribute on one beer. Validates against the declared type,
+     * Sets one attribute on one item. Validates against the declared type,
      * and for enums against the declared options.
      */
     public function setValue(int $postId, string $slug, string|int|float|bool $value): true|WP_Error

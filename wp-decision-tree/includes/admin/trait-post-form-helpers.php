@@ -1,5 +1,5 @@
 <?php
-namespace BeerTree\Admin;
+namespace ItemTree\Admin;
 
 use WP_Error;
 

@@ -1,8 +1,8 @@
 <?php
-namespace BeerTree\Beer;
+namespace ItemTree\Item;
 
-use BeerTree\Admin\PostFormHelpers;
-use BeerTree\Repository;
+use ItemTree\Admin\PostFormHelpers;
+use ItemTree\Repository;
 use WP_Error;
 
 /** Defines the attribute vocabulary shared by all trees. */
@@ -63,7 +63,7 @@ jQuery(function ($) {
         $box.on('click', '.bdt-remove', function () {
             var used = parseInt(this.dataset.used, 10) || 0;
             if (used > 0 && !window.confirm(
-                used + ' beer(s) use this option. Removing it clears that value from them. Remove anyway?'
+                used + ' item(s) use this option. Removing it clears that value from them. Remove anyway?'
             )) {
                 return;
             }
@@ -184,7 +184,7 @@ CSS);
 
     private function renderList(): void
     {
-        echo '<p>Attributes describe the details recorded on beers. Each is defined once and shared across all trees.</p>';
+        echo '<p>Attributes describe the details recorded on items. Each is defined once and shared across all trees.</p>';
 
         $attributes = $this->repo->listAttributes();
 
@@ -258,7 +258,7 @@ CSS);
                 'Choices',
                 $this->optionsEditor($options, $this->repo->enumUsage((int) $attr->id)),
                 '',
-                'Drag to reorder. Renaming a choice updates every beer that uses it; removing one clears it from those beers.',
+                'Drag to reorder. Renaming a choice updates every item that uses it; removing one clears it from those items.',
             ];
         }
 
@@ -275,7 +275,7 @@ CSS);
      * page loaded, empty for new rows) so renames can be carried over.
      *
      * @param string[]           $options
-     * @param array<string, int> $usage    option => number of beers using it
+     * @param array<string, int> $usage    option => number of items using it
      */
     private function optionsEditor(array $options, array $usage = []): string
     {
